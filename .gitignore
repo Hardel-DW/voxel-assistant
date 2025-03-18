@@ -1,0 +1,7 @@
+node_modules
+coverage
+.dev.vars
+.wrangler
+.env
+.env.local
+.env.development
