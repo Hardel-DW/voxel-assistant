@@ -1,8 +1,15 @@
 name = "voxel-assistant"
-main = "./src/server.js"
+main = "dist/worker.js"
 compatibility_date="2023-05-18"
 
-# [secrets]
+[vars]
+# Variables d'environnement publiques
+# Ne mettez pas de secrets ici
+
+[build]
+command = "npm run build"
+
+# Secrets à configurer avec wrangler:
 # DISCORD_TOKEN
 # DISCORD_PUBLIC_KEY
 # DISCORD_APPLICATION_ID
