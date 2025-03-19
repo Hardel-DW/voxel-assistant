@@ -99,9 +99,11 @@ export const COMMANDS: Command[] = [
  * Command handler
  * @param commandName Name of the command to execute
  * @param options Options passées à la commande
+ * @param interaction Objet d'interaction Discord
+ * @param env Variables d'environnement de Cloudflare Workers
  * @returns Response content or null if the command doesn't exist
  */
-export async function executeCommand(commandName: string, options?: any, interaction?: any): Promise<string | null> {
+export async function executeCommand(commandName: string, options?: any, interaction?: any, env?: any): Promise<string | null> {
     switch (commandName) {
         case "foo":
             return "Hello World";
@@ -143,7 +145,9 @@ export async function executeCommand(commandName: string, options?: any, interac
                 // Récupérer le message via l'API Discord
                 const channelId = interaction.channel_id;
                 const messageId = options.message_id;
-                const token = process.env.DISCORD_BOT_TOKEN;
+
+                // Utiliser le token depuis l'objet env de Cloudflare Workers
+                const token = env?.DISCORD_BOT_TOKEN;
 
                 if (!token) {
                     return "Token Discord non disponible.";

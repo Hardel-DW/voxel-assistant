@@ -104,8 +104,8 @@ export default {
                           }, {})
                         : undefined;
 
-                    // Exécuter la commande de manière asynchrone en passant l'objet interaction
-                    const commandResponse = await executeCommand(commandName, options, interaction);
+                    // Exécuter la commande de manière asynchrone en passant l'objet interaction et env
+                    const commandResponse = await executeCommand(commandName, options, interaction, env);
 
                     if (commandResponse) {
                         return new Response(
