@@ -93,6 +93,9 @@ async function configureBotIntents() {
     }
 }
 
+// Export functions for use in other modules
+export { registerCommands, configureBotIntents };
+
 // Execute operations
 async function main() {
     try {

@@ -1,6 +1,6 @@
 import { InteractionType, verifyKey } from "discord-interactions";
-import { RESPONSES } from "./data";
 import { InteractionResponseType, executeCommand } from "./commands";
+import { processQuestion } from "./ai-handler";
 
 export interface Env {
     DISCORD_PUBLIC_KEY: string;
@@ -52,17 +52,15 @@ async function sendDiscordMessage(channelId: string, content: string, env: Env):
     }
 }
 
-// Fonction pour trouver une réponse appropriée
-function findResponse(messageText: string): string | null {
-    const lowerCaseMessage = messageText.toLowerCase();
-
-    for (const item of RESPONSES) {
-        if (item.triggers.some((trigger) => lowerCaseMessage.includes(trigger.toLowerCase()))) {
-            return item.response;
-        }
+// Fonction pour trouver une réponse avec l'IA
+async function findAIResponse(messageText: string): Promise<string | null> {
+    try {
+        // Utiliser directement processQuestion qui gère l'ensemble du processus
+        return await processQuestion(messageText);
+    } catch (error) {
+        console.error("Erreur lors de la recherche d'une réponse IA:", error);
+        return null;
     }
-
-    return null;
 }
 
 // Gestionnaire principal des requêtes Discord
@@ -99,7 +97,15 @@ export default {
                 // Répondre aux commandes slash
                 if (interaction.type === InteractionType.APPLICATION_COMMAND) {
                     const commandName = interaction.data.name;
-                    const commandResponse = executeCommand(commandName);
+                    const options = interaction.data.options
+                        ? interaction.data.options.reduce((acc: any, option: any) => {
+                              acc[option.name] = option.value;
+                              return acc;
+                          }, {})
+                        : undefined;
+
+                    // Exécuter la commande de manière asynchrone
+                    const commandResponse = await executeCommand(commandName, options);
 
                     if (commandResponse) {
                         return new Response(
@@ -136,12 +142,12 @@ export default {
                     const messageContent = interaction.content;
                     const channelId = interaction.channel_id;
 
-                    // Chercher une réponse appropriée
-                    const responseContent = findResponse(messageContent);
+                    // Chercher une réponse avec notre système d'IA
+                    const aiResponse = await findAIResponse(messageContent);
 
-                    if (responseContent) {
-                        // Utiliser le token du bot pour envoyer un message dans le canal
-                        ctx.waitUntil(sendDiscordMessage(channelId, responseContent, env));
+                    // Si l'IA trouve une réponse, l'utiliser
+                    if (aiResponse) {
+                        ctx.waitUntil(sendDiscordMessage(channelId, aiResponse, env));
                     }
 
                     // Ne pas bloquer l'interaction

@@ -1,3 +1,6 @@
+import { processQuestion } from "./ai-handler";
+import { getResponseContent } from "./markdown-loader";
+
 /**
  * Definition of types for Discord commands
  */
@@ -51,35 +54,54 @@ export const COMMANDS: Command[] = [
         name: "info",
         description: "Displays information about the bot",
         type: ApplicationCommandType.CHAT_INPUT
+    },
+    {
+        name: "ask",
+        description: "Ask a question to the bot",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "question",
+                description: "The question you want to ask",
+                type: 3, // String type
+                required: true
+            }
+        ]
     }
 ];
 
 /**
  * Command handler
  * @param commandName Name of the command to execute
+ * @param options Options passées à la commande
  * @returns Response content or null if the command doesn't exist
  */
-export function executeCommand(commandName: string): string | null {
+export async function executeCommand(commandName: string, options?: any): Promise<string | null> {
     switch (commandName) {
         case "foo":
             return "Hello World";
 
-        case "help":
-            return `**Keywords recognized by the bot:**
-- help, need help: To get assistance
-- hello, hi, hey: To greet me
-- thanks, thank you: To thank me
-- "what is", "what's": To ask questions about what I am
-- "how does it work": To learn how I function
-- code, github, source: For info about my source code
-- who are you, your name: To learn more about me
-- problem, error, bug: To report an issue`;
+        case "help": {
+            // Utiliser la réponse markdown d'aide
+            return await getResponseContent("help");
+        }
 
-        case "info":
-            return `**Discord Bot - Voxel Assistant**
-Version: 1.0.0
-Technology: TypeScript, Cloudflare Workers
-Features: Slash commands and keyword detection`;
+        case "info": {
+            // Utiliser la réponse markdown d'à propos
+            return await getResponseContent("about");
+        }
+
+        case "ask": {
+            if (!options?.question) {
+                return "Vous devez me poser une question!";
+            }
+
+            // Obtenir la question des options
+            const question = options.question;
+
+            // Utiliser notre système d'IA pour générer une réponse
+            return await processQuestion(question);
+        }
 
         default:
             return null;
