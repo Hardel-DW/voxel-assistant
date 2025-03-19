@@ -16,7 +16,7 @@ jobs:
       - run: npm install
       
       - name: Register Discord commands
-        run: pnpm register
+        run: npm run register
         env:
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
