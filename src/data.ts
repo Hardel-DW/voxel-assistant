@@ -58,7 +58,7 @@ export const RESPONSES: ResponseData[] = [
     },
     {
         triggers: ["lol", "haha", "funny"],
-        response: "Glad that made you laugh! 😄",
+        response: "Glad that made you laugh ! 😄",
         description: "Response to laughter"
     },
     {
