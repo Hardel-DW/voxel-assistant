@@ -23,7 +23,9 @@ function calculateSimilarity(text1: string, text2: string): number {
     const intersection = new Set([...set1].filter((x) => set2.has(x)));
 
     // Si les deux textes sont vides, retourner 0
-    if (set1.size === 0 && set2.size === 0) return 0;
+    if (set1.size === 0 && set2.size === 0) {
+        return 0;
+    }
 
     // Calculer similarité par coefficient de Jaccard
     return intersection.size / (set1.size + set2.size - intersection.size);
@@ -41,7 +43,9 @@ export async function detectIntentFromMessage(message: string): Promise<string |
     // Parcourir toutes les réponses et leurs patterns
     for (const [responseId, response] of Object.entries(responses)) {
         // Ignorer la réponse par défaut qui n'a pas de patterns
-        if (responseId === "default" || !response.patterns.length) continue;
+        if (responseId === "default" || !response.patterns.length) {
+            continue;
+        }
 
         for (const pattern of response.patterns) {
             const score = calculateSimilarity(message, pattern);

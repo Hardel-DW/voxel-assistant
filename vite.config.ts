@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
-import { readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import fs from "node:fs";
+import path from "node:path";
 
 // Fonction pour extraire le frontmatter des fichiers markdown
 function extractFrontmatter(content: string): { frontmatter: any; content: string } {
@@ -62,17 +62,17 @@ function markdownInjectorPlugin() {
             // Ne transformer que le fichier markdown-loader.ts
             if (id.endsWith("markdown-loader.ts")) {
                 // Charger tous les fichiers markdown à l'avance
-                const responsesDir = resolve(process.cwd(), "responses");
+                const responsesDir = path.resolve(process.cwd(), "responses");
                 const responses: Record<string, any> = {};
 
                 try {
-                    const files = readdirSync(responsesDir).filter((file) => file.endsWith(".md"));
+                    const files = fs.readdirSync(responsesDir).filter((file) => file.endsWith(".md"));
 
                     // Pour chaque fichier markdown
                     for (const file of files) {
                         try {
-                            const filePath = resolve(responsesDir, file);
-                            const fileContent = readFileSync(filePath, "utf-8");
+                            const filePath = path.resolve(responsesDir, file);
+                            const fileContent = fs.readFileSync(filePath, "utf-8");
                             const fileId = file.replace(/\.md$/, ""); // Enlever l'extension .md
 
                             // Extraire frontmatter et contenu
@@ -105,15 +105,17 @@ function markdownInjectorPlugin() {
                 const responsesJSON = JSON.stringify(responses, null, 2);
                 const replacementFunction = `
 export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponsesCache> {
-	// Si déjà en cache, retourner le cache
-	if (responseCache) return responseCache;
+    // Si déjà en cache, retourner le cache
+    if (responseCache) {
+        return responseCache;
+    }
 
-	// Données injectées par le plugin markdown-injector pendant le build
-	const responses: MarkdownResponsesCache = ${responsesJSON};
-	
-	// Stocker en cache
-	responseCache = responses;
-	return responses;
+    // Données injectées par le plugin markdown-injector pendant le build
+    const responses: MarkdownResponsesCache = ${responsesJSON};
+    
+    // Stocker en cache
+    responseCache = responses;
+    return responses;
 }`;
 
                 // Remplacer la fonction dans le code

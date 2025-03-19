@@ -168,7 +168,9 @@ function getDefaultResponses(): MarkdownResponsesCache {
  */
 export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
-    if (responseCache) return responseCache;
+    if (responseCache) {
+        return responseCache;
+    }
 
     // ATTENTION: Ce code est remplacé pendant le build par le plugin Vite/Rollup
     // Ne devrait jamais être exécuté tel quel en production
