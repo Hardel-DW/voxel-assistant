@@ -101,10 +101,10 @@ function markdownInjectorPlugin() {
                     };
                 }
 
-                // Remplacer la fonction readMarkdownResponsesForWorker par une version avec les données injectées
+                // Remplacer la fonction getMarkdownResponses par une version avec les données injectées
                 const responsesJSON = JSON.stringify(responses, null, 2);
                 const replacementFunction = `
-export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponsesCache> {
+export async function getMarkdownResponses(): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
     if (responseCache) {
         return responseCache;
@@ -119,10 +119,7 @@ export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponse
 }`;
 
                 // Remplacer la fonction dans le code
-                return code.replace(
-                    /export async function readMarkdownResponsesForWorker\(\)[\s\S]*?return\s+\{[\s\S]*?\}\s*;\s*\}/,
-                    replacementFunction
-                );
+                return code.replace(/export async function getMarkdownResponses\(\)[\s\S]*?return\s+responses;\s*\}/, replacementFunction);
             }
 
             return code;
