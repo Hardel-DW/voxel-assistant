@@ -53,10 +53,10 @@ async function sendDiscordMessage(channelId: string, content: string, env: Env):
 }
 
 // Fonction pour trouver une réponse avec l'IA
-async function findAIResponse(messageText: string): Promise<string | null> {
+async function findAIResponse(messageText: string, env?: any): Promise<string | null> {
     try {
         // Utiliser directement processQuestion qui gère l'ensemble du processus
-        return await processQuestion(messageText);
+        return await processQuestion(messageText, env);
     } catch (error) {
         console.error("Erreur lors de la recherche d'une réponse IA:", error);
         return null;
@@ -142,8 +142,8 @@ export default {
                     const messageContent = interaction.content;
                     const channelId = interaction.channel_id;
 
-                    // Chercher une réponse avec notre système d'IA
-                    const aiResponse = await findAIResponse(messageContent);
+                    // Chercher une réponse avec notre système d'IA en passant l'objet env
+                    const aiResponse = await findAIResponse(messageContent, env);
 
                     // Si l'IA trouve une réponse, l'utiliser
                     if (aiResponse) {

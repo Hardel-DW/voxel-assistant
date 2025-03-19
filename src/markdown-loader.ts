@@ -15,31 +15,27 @@ let responseCache: MarkdownResponsesCache | null = null;
 
 /**
  * Récupère les réponses markdown depuis Cloudflare KV
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
  */
-export async function getMarkdownResponses(): Promise<MarkdownResponsesCache> {
+export async function getMarkdownResponses(env?: any): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
     if (responseCache) return responseCache;
 
     try {
-        // Accès à Cloudflare KV via l'API globale de Cloudflare Workers
-        // @ts-ignore - Cette variable est disponible dans l'environnement Cloudflare Workers
-        const MARKDOWN_KV = globalThis.MARKDOWN_KV;
-
-        if (!MARKDOWN_KV) {
-            console.warn("KV store not available, using default responses");
+        // Accès à Cloudflare KV via l'objet env
+        if (!env?.MARKDOWN_KV) {
+            console.warn("KV store not available (env), using default responses");
             return getDefaultResponses();
         }
 
         // Récupérer la liste des clés disponibles
-        // @ts-ignore - Méthode list() disponible dans Cloudflare KV
-        const keys = await MARKDOWN_KV.list();
+        const keys = await env.MARKDOWN_KV.list();
         const responses: MarkdownResponsesCache = {};
 
         // Charger chaque réponse
         for (const key of keys.keys) {
             try {
-                // @ts-ignore - Méthode get() disponible dans Cloudflare KV
-                const responseText = await MARKDOWN_KV.get(key.name);
+                const responseText = await env.MARKDOWN_KV.get(key.name);
                 if (responseText) {
                     try {
                         // Essayer d'analyser comme JSON (pour les métadonnées)
@@ -73,10 +69,7 @@ export async function getMarkdownResponses(): Promise<MarkdownResponsesCache> {
 
             // Sauvegarder la réponse par défaut dans KV si elle n'existe pas
             try {
-                if (MARKDOWN_KV) {
-                    // @ts-ignore
-                    await MARKDOWN_KV.put("default", JSON.stringify(responses.default));
-                }
+                await env.MARKDOWN_KV.put("default", JSON.stringify(responses.default));
             } catch (err) {
                 console.error("Error saving default response:", err);
             }
@@ -107,9 +100,10 @@ function getDefaultResponses(): MarkdownResponsesCache {
 /**
  * Récupère le contenu d'une réponse par son identifiant
  * @param id Identifiant de la réponse
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
  */
-export async function getResponseContent(id: string): Promise<string> {
-    const responses = await getMarkdownResponses();
+export async function getResponseContent(id: string, env?: any): Promise<string> {
+    const responses = await getMarkdownResponses(env);
     const response = responses[id];
 
     if (!response) {
@@ -126,13 +120,18 @@ export async function getResponseContent(id: string): Promise<string> {
  * @param content Contenu markdown
  * @param name Nom optionnel
  * @param patterns Patterns de détection optionnels
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
  */
-export async function registerMarkdownResponse(id: string, content: string, name?: string, patterns?: string[]): Promise<boolean> {
+export async function registerMarkdownResponse(
+    id: string,
+    content: string,
+    name?: string,
+    patterns?: string[],
+    env?: any
+): Promise<boolean> {
     try {
-        // @ts-ignore - Cette variable est disponible dans l'environnement Cloudflare Workers
-        const MARKDOWN_KV = globalThis.MARKDOWN_KV;
-
-        if (!MARKDOWN_KV) {
+        // Accéder au KV via l'objet env
+        if (!env?.MARKDOWN_KV) {
             console.error("KV store not available, cannot register response");
             return false;
         }
@@ -143,13 +142,13 @@ export async function registerMarkdownResponse(id: string, content: string, name
             patterns: patterns || []
         };
 
-        // Sauvegarder dans KV
-        // @ts-ignore
-        await MARKDOWN_KV.put(id, JSON.stringify(response));
+        // Sauvegarder dans KV en utilisant le binding depuis env
+        await env.MARKDOWN_KV.put(id, JSON.stringify(response));
 
         // Invalider le cache
         responseCache = null;
 
+        console.log(`Response ${id} registered successfully`);
         return true;
     } catch (error) {
         console.error("Error registering markdown response:", error);

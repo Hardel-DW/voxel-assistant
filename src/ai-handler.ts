@@ -5,8 +5,8 @@ import { calculateSimilarity } from "./util/similarity";
  * Fonction pour détecter l'intent d'un message à partir des patterns
  * définis dans les fichiers markdown
  */
-export async function detectIntentFromMessage(message: string): Promise<string | null> {
-    const responses = await getMarkdownResponses();
+export async function detectIntentFromMessage(message: string, env?: any): Promise<string | null> {
+    const responses = await getMarkdownResponses(env);
     let bestMatch: string | null = null;
     let highestScore = 0.3; // Seuil minimal de confiance
 
@@ -30,15 +30,15 @@ export async function detectIntentFromMessage(message: string): Promise<string |
 /**
  * Fonction principale pour traiter une question et obtenir une réponse
  */
-export async function processQuestion(question: string): Promise<string> {
+export async function processQuestion(question: string, env?: any): Promise<string> {
     // Détecter l'intent du message
-    const intentId = await detectIntentFromMessage(question);
+    const intentId = await detectIntentFromMessage(question, env);
 
     if (intentId) {
         // Si un intent est détecté, récupérer le contenu
-        return await getResponseContent(intentId);
+        return await getResponseContent(intentId, env);
     }
 
     // Aucun intent détecté, utiliser la réponse par défaut
-    return await getResponseContent("default");
+    return await getResponseContent("default", env);
 }

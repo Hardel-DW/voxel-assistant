@@ -110,12 +110,12 @@ export async function executeCommand(commandName: string, options?: any, interac
 
         case "help": {
             // Utiliser la réponse markdown d'aide
-            return await getResponseContent("help");
+            return await getResponseContent("help", env);
         }
 
         case "info": {
             // Utiliser la réponse markdown d'à propos
-            return await getResponseContent("about");
+            return await getResponseContent("about", env);
         }
 
         case "ask": {
@@ -127,7 +127,7 @@ export async function executeCommand(commandName: string, options?: any, interac
             const question = options.question;
 
             // Utiliser notre système d'IA pour générer une réponse
-            return await processQuestion(question);
+            return await processQuestion(question, env);
         }
 
         case "register": {
@@ -171,8 +171,8 @@ export async function executeCommand(commandName: string, options?: any, interac
                     return "Le message ne contient pas de texte.";
                 }
 
-                // Enregistrer la réponse markdown
-                const success = await registerMarkdownResponse(options.id, content, options.name || options.id);
+                // Enregistrer la réponse markdown en passant l'objet env
+                const success = await registerMarkdownResponse(options.id, content, options.name || options.id, [], env);
 
                 if (success) {
                     return `La réponse "${options.id}" a été enregistrée avec succès!`;
