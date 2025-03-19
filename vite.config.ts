@@ -54,19 +54,26 @@ function extractFrontmatter(content: string): { frontmatter: any; content: strin
     };
 }
 
-// Plugin pour injecter les données des fichiers markdown
-function markdownInjectorPlugin() {
+// Plugin pour créer un module virtuel qui contient toutes les réponses MD
+function bundleMarkdownPlugin() {
+    const virtualModuleId = "virtual:markdown-responses";
+    const resolvedVirtualModuleId = `\0${virtualModuleId}`;
+
     return {
-        name: "markdown-injector",
-        transform(code: string, id: string) {
-            // Ne transformer que le fichier markdown-loader.ts
-            if (id.endsWith("markdown-loader.ts")) {
-                // Charger tous les fichiers markdown à l'avance
+        name: "bundle-markdown",
+        resolveId(id) {
+            if (id === virtualModuleId) {
+                return resolvedVirtualModuleId;
+            }
+        },
+        load(id) {
+            if (id === resolvedVirtualModuleId) {
                 const responsesDir = path.resolve(process.cwd(), "responses");
                 const responses: Record<string, any> = {};
 
                 try {
                     const files = fs.readdirSync(responsesDir).filter((file) => file.endsWith(".md"));
+                    console.log(`Bundling ${files.length} markdown files...`);
 
                     // Pour chaque fichier markdown
                     for (const file of files) {
@@ -84,6 +91,8 @@ function markdownInjectorPlugin() {
                                 name: frontmatter.name || fileId,
                                 patterns: frontmatter.patterns || []
                             };
+
+                            console.log(`Bundled: ${fileId}`);
                         } catch (err) {
                             console.error(`Erreur lors de la lecture du fichier ${file}:`, err);
                         }
@@ -101,28 +110,13 @@ function markdownInjectorPlugin() {
                     };
                 }
 
-                // Remplacer la fonction getMarkdownResponses par une version avec les données injectées
-                const responsesJSON = JSON.stringify(responses, null, 2);
-                const replacementFunction = `
-export async function getMarkdownResponses(): Promise<MarkdownResponsesCache> {
-    // Si déjà en cache, retourner le cache
-    if (responseCache) {
-        return responseCache;
-    }
-
-    // Données injectées par le plugin markdown-injector pendant le build
-    const responses: MarkdownResponsesCache = ${responsesJSON};
-    
-    // Stocker en cache
-    responseCache = responses;
-    return responses;
-}`;
-
-                // Remplacer la fonction dans le code
-                return code.replace(/export async function getMarkdownResponses\(\)[\s\S]*?return\s+responses;\s*\}/, replacementFunction);
+                // Génération du code JS pour le module virtuel
+                return `
+                    // Module généré automatiquement contenant toutes les réponses markdown
+                    const responses = ${JSON.stringify(responses, null, 2)};
+                    export default responses;
+                `;
             }
-
-            return code;
         }
     };
 }
@@ -139,5 +133,5 @@ export default defineConfig({
         },
         minify: false
     },
-    plugins: [markdownInjectorPlugin()]
+    plugins: [bundleMarkdownPlugin()]
 });
