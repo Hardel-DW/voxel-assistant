@@ -1,5 +1,5 @@
 import { processQuestion } from "./ai-handler";
-import { registerMarkdownResponse, getMarkdownResponses, getResponseContent } from "./markdown-loader";
+import { registerMarkdownResponse, getMarkdownResponses, getResponseContent, invalidateCache } from "./markdown-loader";
 import { generateEmbedding } from "./util/embeddings";
 
 /**
@@ -107,6 +107,19 @@ export const COMMANDS: Command[] = [
             {
                 name: "id",
                 description: "ID of the content to view",
+                type: 3, // String type
+                required: true
+            }
+        ]
+    },
+    {
+        name: "delete",
+        description: "Delete an element from the database by its ID",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "id",
+                description: "ID of the content to delete",
                 type: 3, // String type
                 required: true
             }
@@ -317,6 +330,46 @@ export async function executeCommand(commandName: string, options?: any, interac
             } catch (error) {
                 console.error("Erreur lors de la récupération du contenu:", error);
                 return "Une erreur est survenue lors de la récupération du contenu.";
+            }
+        }
+
+        case "delete": {
+            try {
+                // Vérifier que l'utilisateur a les droits d'administrateur
+                const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
+                if (!hasAdminPermission) {
+                    return "Vous n'avez pas les droits d'administrateur pour utiliser cette commande.";
+                }
+
+                if (!options?.id) {
+                    return "Vous devez fournir un ID valide.";
+                }
+
+                // Vérifier si l'élément existe
+                const responses = await getMarkdownResponses(env);
+                if (!responses[options.id]) {
+                    return `Aucun contenu trouvé avec l'ID "${options.id}".`;
+                }
+
+                // Protection contre la suppression de la réponse par défaut
+                if (options.id === "default") {
+                    return "Vous ne pouvez pas supprimer la réponse par défaut.";
+                }
+
+                // Supprimer l'élément
+                if (!env?.MARKDOWN_KV) {
+                    return "KV store non disponible, impossible de supprimer l'élément.";
+                }
+
+                await env.MARKDOWN_KV.delete(options.id);
+
+                // Invalider le cache
+                invalidateCache();
+
+                return `✅ Élément "${options.id}" supprimé avec succès.`;
+            } catch (error) {
+                console.error("Erreur lors de la suppression de l'élément:", error);
+                return "Une erreur est survenue lors de la suppression de l'élément.";
             }
         }
 

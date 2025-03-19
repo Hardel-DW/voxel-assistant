@@ -143,7 +143,7 @@ export async function registerMarkdownResponse(id: string, content: string, name
         await env.MARKDOWN_KV.put(id, JSON.stringify(response));
 
         // Invalider le cache
-        responseCache = null;
+        invalidateCache();
 
         console.log(`Response ${id} registered successfully with embedding`);
         return true;
@@ -163,4 +163,12 @@ export function responsesToEmbeddingData(responses: MarkdownResponsesCache) {
         name: response.name,
         embedding: response.embedding || []
     }));
+}
+
+/**
+ * Invalide le cache des réponses
+ */
+export function invalidateCache(): void {
+    responseCache = null;
+    console.log("Cache des réponses invalidé");
 }
