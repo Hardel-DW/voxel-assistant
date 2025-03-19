@@ -46,16 +46,6 @@ export const COMMANDS: Command[] = [
         type: ApplicationCommandType.CHAT_INPUT
     },
     {
-        name: "help",
-        description: "Displays the list of keywords recognized by the bot",
-        type: ApplicationCommandType.CHAT_INPUT
-    },
-    {
-        name: "info",
-        description: "Displays information about the bot",
-        type: ApplicationCommandType.CHAT_INPUT
-    },
-    {
         name: "ask",
         description: "Ask a question to the bot",
         type: ApplicationCommandType.CHAT_INPUT,
@@ -107,17 +97,6 @@ export async function executeCommand(commandName: string, options?: any, interac
     switch (commandName) {
         case "foo":
             return "Hello World";
-
-        case "help": {
-            // Utiliser la réponse markdown d'aide
-            return await getResponseContent("help", env);
-        }
-
-        case "info": {
-            // Utiliser la réponse markdown d'à propos
-            return await getResponseContent("about", env);
-        }
-
         case "ask": {
             if (!options?.question) {
                 return "Vous devez me poser une question!";
