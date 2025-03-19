@@ -1,5 +1,17 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+// Imports conditionnels pour éviter que node:fs/path ne soient inclus dans le bundle Workers
+let fs: any;
+let path: any;
+
+// On ne charge ces modules que si on est dans un environnement Node.js
+if (typeof process !== "undefined" && process.versions && process.versions.node) {
+    // Pour les environnements Node.js uniquement (dev)
+    import("node:fs").then((module) => {
+        fs = module;
+    });
+    import("node:path").then((module) => {
+        path = module;
+    });
+}
 
 // Interface pour les réponses markdown
 export interface MarkdownResponse {
@@ -74,24 +86,31 @@ function extractFrontmatter(content: string): { frontmatter: any; content: strin
 
 /**
  * Fonction pour charger les réponses markdown depuis le système de fichiers
+ * Cette fonction n'est utilisée qu'en développement
  */
 export async function readMarkdownResponses(): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
     if (responseCache) return responseCache;
 
+    // Vérifier qu'on est bien dans un environnement Node
+    if (!fs || !path) {
+        console.error("Tentative d'utiliser fs/path dans un environnement non-Node");
+        return getDefaultResponses();
+    }
+
     const responses: MarkdownResponsesCache = {};
 
     try {
-        const responsesDir = resolve(process.cwd(), "responses");
+        const responsesDir = path.resolve(process.cwd(), "responses");
 
         // Lire tous les fichiers du dossier responses
-        const files = readdirSync(responsesDir).filter((file) => file.endsWith(".md"));
+        const files = fs.readdirSync(responsesDir).filter((file: string) => file.endsWith(".md"));
 
         // Pour chaque fichier markdown
         for (const file of files) {
             try {
-                const filePath = resolve(responsesDir, file);
-                const fileContent = readFileSync(filePath, "utf-8");
+                const filePath = path.resolve(responsesDir, file);
+                const fileContent = fs.readFileSync(filePath, "utf-8");
                 const fileId = file.replace(/\.md$/, ""); // Enlever l'extension .md
 
                 // Extraire frontmatter et contenu
@@ -124,46 +143,45 @@ export async function readMarkdownResponses(): Promise<MarkdownResponsesCache> {
         return responses;
     } catch (error) {
         console.error("Erreur lors du chargement des réponses markdown:", error);
-
-        // Retourner au moins une réponse par défaut en cas d'erreur
-        return {
-            default: {
-                content: "Je ne comprends pas votre question. Le système de réponses n'est pas disponible.",
-                name: "default",
-                patterns: []
-            }
-        };
+        return getDefaultResponses();
     }
 }
 
 /**
+ * Retourne des réponses par défaut en cas d'erreur
+ */
+function getDefaultResponses(): MarkdownResponsesCache {
+    return {
+        default: {
+            content: "Je ne comprends pas votre question. Le système de réponses n'est pas disponible.",
+            name: "default",
+            patterns: []
+        }
+    };
+}
+
+/**
  * Version pour Cloudflare Workers
- * Génère dynamiquement lors du build et est inclus dans le bundle
+ * CETTE FONCTION EST REMPLACÉE PENDANT LE BUILD
+ * par un plugin Vite/Rollup qui va capturer les données du dossier responses
+ * et les injecter directement ici comme un objet statique.
  */
 export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
     if (responseCache) return responseCache;
 
-    // En production (Worker), on utilise readMarkdownResponses()
-    // Cette fonction est automatiquement réécrite pendant le build
-    // grâce au plugin Rollup/Vite qui capture les données au moment du build
+    // ATTENTION: Ce code est remplacé pendant le build par le plugin Vite/Rollup
+    // Ne devrait jamais être exécuté tel quel en production
+    console.warn("readMarkdownResponsesForWorker: Cette fonction devrait être remplacée pendant le build");
 
-    try {
-        // Pendant le build, ce code est exécuté une fois et le résultat est "inlined"
-        // dans le bundle final
-        return await readMarkdownResponses();
-    } catch (error) {
-        console.error("Erreur lors du chargement des réponses en production:", error);
-
-        // Réponse minimale par défaut
-        return {
-            default: {
-                content: "Je ne comprends pas votre question. Le système de réponses n'est pas disponible.",
-                name: "default",
-                patterns: []
-            }
-        };
-    }
+    // Réponse minimaliste par défaut
+    return {
+        default: {
+            content: "Mode Workers en cours de construction.",
+            name: "default",
+            patterns: []
+        }
+    };
 }
 
 /**
