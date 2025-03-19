@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Interface pour les réponses markdown
@@ -74,8 +74,6 @@ function extractFrontmatter(content: string): { frontmatter: any; content: strin
 
 /**
  * Fonction pour charger les réponses markdown depuis le système de fichiers
- * Note: Cette approche fonctionne en développement local, mais pour Cloudflare Workers,
- * les fichiers devront être packagés ou stockés dans KV
  */
 export async function readMarkdownResponses(): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
@@ -84,33 +82,41 @@ export async function readMarkdownResponses(): Promise<MarkdownResponsesCache> {
     const responses: MarkdownResponsesCache = {};
 
     try {
-        // Liste des réponses disponibles
-        const responsesList = ["greeting", "help", "about", "weather", "default"];
+        const responsesDir = resolve(process.cwd(), "responses");
 
-        // Pour chaque réponse, lire le fichier markdown
-        for (const name of responsesList) {
+        // Lire tous les fichiers du dossier responses
+        const files = readdirSync(responsesDir).filter((file) => file.endsWith(".md"));
+
+        // Pour chaque fichier markdown
+        for (const file of files) {
             try {
-                const path = resolve(process.cwd(), "responses", `${name}.md`);
-                const fileContent = readFileSync(path, "utf-8");
+                const filePath = resolve(responsesDir, file);
+                const fileContent = readFileSync(filePath, "utf-8");
+                const fileId = file.replace(/\.md$/, ""); // Enlever l'extension .md
 
                 // Extraire frontmatter et contenu
                 const { frontmatter, content } = extractFrontmatter(fileContent);
 
                 // Créer l'objet de réponse
-                responses[name] = {
+                responses[fileId] = {
                     content: content.trim(),
-                    name: frontmatter.name || name,
+                    name: frontmatter.name || fileId,
                     patterns: frontmatter.patterns || []
                 };
+
+                console.log(`Loaded response: ${fileId}`);
             } catch (err) {
-                console.error(`Erreur lors de la lecture du fichier ${name}.md:`, err);
-                // Définir une réponse par défaut en cas d'échec
-                responses[name] = {
-                    content: `Je n'ai pas pu trouver de réponse pour "${name}".`,
-                    name,
-                    patterns: []
-                };
+                console.error(`Erreur lors de la lecture du fichier ${file}:`, err);
             }
+        }
+
+        // Vérifier qu'on a une réponse par défaut
+        if (!responses.default) {
+            responses.default = {
+                content: "Je ne comprends pas votre question.",
+                name: "default",
+                patterns: []
+            };
         }
 
         // Stocker en cache
@@ -118,64 +124,46 @@ export async function readMarkdownResponses(): Promise<MarkdownResponsesCache> {
         return responses;
     } catch (error) {
         console.error("Erreur lors du chargement des réponses markdown:", error);
-        // Retourner un objet vide en cas d'erreur
-        return {};
+
+        // Retourner au moins une réponse par défaut en cas d'erreur
+        return {
+            default: {
+                content: "Je ne comprends pas votre question. Le système de réponses n'est pas disponible.",
+                name: "default",
+                patterns: []
+            }
+        };
     }
 }
 
 /**
- * Version pour Cloudflare Workers - À utiliser en production
- * Utilise des imports statiques pour packager les fichiers avec le worker
+ * Version pour Cloudflare Workers
+ * Génère dynamiquement lors du build et est inclus dans le bundle
  */
 export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponsesCache> {
     // Si déjà en cache, retourner le cache
     if (responseCache) return responseCache;
 
-    // En production, ces fichiers seraient importés directement ou stockés dans KV
-    // Définir les réponses manuellement ou les précharger dans le worker
-    const responses: MarkdownResponsesCache = {
-        greeting: {
-            content: "# Bonjour! 👋\n\nRavi de vous rencontrer. Comment puis-je vous aider aujourd'hui?",
-            name: "greeting",
-            patterns: ["hello", "hi", "hey", "good morning", "salut", "bonjour", "bonsoir", "coucou"]
-        },
-        help: {
-            content: "## Aide 🔍\n\nVoici les commandes disponibles...",
-            name: "help",
-            patterns: ["help me", "need help", "assistance", "support", "aide", "besoin d'aide", "comment ça marche"]
-        },
-        about: {
-            content: "## À propos de moi 🤖\n\nJe suis **Voxel Assistant**...",
-            name: "about",
-            patterns: ["who are you", "what are you", "about you", "your purpose", "qui es-tu", "que fais-tu", "à propos de toi"]
-        },
-        weather: {
-            content: "## Météo ☁️\n\nJe n'ai pas accès aux données météo en temps réel...",
-            name: "weather",
-            patterns: [
-                "weather",
-                "forecast",
-                "temperature",
-                "rain",
-                "snow",
-                "sunny",
-                "météo",
-                "température",
-                "pluie",
-                "neige",
-                "temps qu'il fait"
-            ]
-        },
-        default: {
-            content: "## Hmm... 🤔\n\nJe ne suis pas certain de comprendre votre question...",
-            name: "default",
-            patterns: []
-        }
-    };
+    // En production (Worker), on utilise readMarkdownResponses()
+    // Cette fonction est automatiquement réécrite pendant le build
+    // grâce au plugin Rollup/Vite qui capture les données au moment du build
 
-    // Stocker en cache
-    responseCache = responses;
-    return responses;
+    try {
+        // Pendant le build, ce code est exécuté une fois et le résultat est "inlined"
+        // dans le bundle final
+        return await readMarkdownResponses();
+    } catch (error) {
+        console.error("Erreur lors du chargement des réponses en production:", error);
+
+        // Réponse minimale par défaut
+        return {
+            default: {
+                content: "Je ne comprends pas votre question. Le système de réponses n'est pas disponible.",
+                name: "default",
+                patterns: []
+            }
+        };
+    }
 }
 
 /**
