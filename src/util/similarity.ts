@@ -1,28 +1,30 @@
 /**
- * Fonction pour calculer la similarité entre deux textes (méthode simple)
- * Utilise le coefficient de Jaccard sur les mots
+ * Calcule la similarité simple entre deux chaînes de caractères
+ * Utilisé pour la compatibilité avec le système existant
  */
-export function calculateSimilarity(text1: string, text2: string): number {
-    // Normaliser et diviser en mots
-    const words1 = text1
-        .toLowerCase()
-        .replace(/[^\w\s]/g, "")
-        .split(/\s+/);
-    const words2 = text2
-        .toLowerCase()
-        .replace(/[^\w\s]/g, "")
-        .split(/\s+/);
+export function calculateSimilarity(str1: string, str2: string): number {
+    const s1 = str1.toLowerCase();
+    const s2 = str2.toLowerCase();
 
-    // Convertir en ensembles pour compter les occurrences uniques
-    const set1 = new Set(words1);
-    const set2 = new Set(words2);
+    // Si l'une des chaînes contient l'autre, forte similarité
+    if (s1.includes(s2) || s2.includes(s1)) {
+        return 0.9;
+    }
 
-    // Créer l'intersection
-    const intersection = new Set([...set1].filter((x) => set2.has(x)));
+    // Compter les mots en commun
+    const words1 = new Set(s1.split(/\s+/).filter((word) => word.length > 3));
+    const words2 = new Set(s2.split(/\s+/).filter((word) => word.length > 3));
 
-    // Si les deux textes sont vides, retourner 0
-    if (set1.size === 0 && set2.size === 0) return 0;
+    let commonWords = 0;
+    for (const word of words1) {
+        if (words2.has(word)) {
+            commonWords++;
+        }
+    }
 
-    // Calculer similarité par coefficient de Jaccard
-    return intersection.size / (set1.size + set2.size - intersection.size);
+    // Calculer le score en fonction des mots communs
+    const totalUniqueWords = new Set([...words1, ...words2]).size;
+    if (totalUniqueWords === 0) return 0;
+
+    return commonWords / totalUniqueWords;
 }

@@ -2,7 +2,7 @@
 export interface MarkdownResponse {
     content: string;
     name: string;
-    patterns: string[];
+    embedding?: number[];
 }
 
 // Interface pour le cache des réponses
@@ -12,6 +12,9 @@ export interface MarkdownResponsesCache {
 
 // Cache pour les réponses chargées
 let responseCache: MarkdownResponsesCache | null = null;
+
+// Importer les fonctions d'embedding
+import { generateEmbedding } from "./util/embeddings";
 
 /**
  * Récupère les réponses markdown depuis Cloudflare KV
@@ -43,14 +46,14 @@ export async function getMarkdownResponses(env?: any): Promise<MarkdownResponses
                         responses[key.name] = {
                             content: parsed.content || "",
                             name: parsed.name || key.name,
-                            patterns: parsed.patterns || []
+                            embedding: parsed.embedding || undefined
                         };
                     } catch {
                         // Si ce n'est pas du JSON, considérer que c'est juste le contenu
                         responses[key.name] = {
                             content: responseText,
                             name: key.name,
-                            patterns: []
+                            embedding: undefined
                         };
                     }
                 }
@@ -63,8 +66,7 @@ export async function getMarkdownResponses(env?: any): Promise<MarkdownResponses
         if (!responses.default) {
             responses.default = {
                 content: "Je ne comprends pas votre question.",
-                name: "default",
-                patterns: []
+                name: "default"
             };
 
             // Sauvegarder la réponse par défaut dans KV si elle n'existe pas
@@ -91,8 +93,7 @@ function getDefaultResponses(): MarkdownResponsesCache {
     return {
         default: {
             content: "Je ne comprends pas votre question.",
-            name: "default",
-            patterns: []
+            name: "default"
         }
     };
 }
@@ -119,16 +120,9 @@ export async function getResponseContent(id: string, env?: any): Promise<string>
  * @param id Identifiant de la réponse
  * @param content Contenu markdown
  * @param name Nom optionnel
- * @param patterns Patterns de détection optionnels
  * @param env L'objet env de Cloudflare Workers contenant le binding KV
  */
-export async function registerMarkdownResponse(
-    id: string,
-    content: string,
-    name?: string,
-    patterns?: string[],
-    env?: any
-): Promise<boolean> {
+export async function registerMarkdownResponse(id: string, content: string, name?: string, env?: any): Promise<boolean> {
     try {
         // Accéder au KV via l'objet env
         if (!env?.MARKDOWN_KV) {
@@ -136,10 +130,13 @@ export async function registerMarkdownResponse(
             return false;
         }
 
+        // Générer l'embedding pour le contenu
+        const embedding = await generateEmbedding(content);
+
         const response: MarkdownResponse = {
             content,
             name: name || id,
-            patterns: patterns || []
+            embedding: embedding
         };
 
         // Sauvegarder dans KV en utilisant le binding depuis env
@@ -148,10 +145,22 @@ export async function registerMarkdownResponse(
         // Invalider le cache
         responseCache = null;
 
-        console.log(`Response ${id} registered successfully`);
+        console.log(`Response ${id} registered successfully with embedding`);
         return true;
     } catch (error) {
         console.error("Error registering markdown response:", error);
         return false;
     }
+}
+
+/**
+ * Convertit les réponses en format compatible avec la recherche d'embeddings
+ */
+export function responsesToEmbeddingData(responses: MarkdownResponsesCache) {
+    return Object.entries(responses).map(([id, response]) => ({
+        id,
+        content: response.content,
+        name: response.name,
+        embedding: response.embedding || []
+    }));
 }

@@ -1,44 +1,63 @@
-import { getMarkdownResponses, getResponseContent } from "./markdown-loader";
-import { calculateSimilarity } from "./util/similarity";
+import { getMarkdownResponses, getResponseContent, responsesToEmbeddingData } from "./markdown-loader";
+import { findMostSimilarDocument } from "./util/embeddings";
 
 /**
- * Fonction pour détecter l'intent d'un message à partir des patterns
- * définis dans les fichiers markdown
+ * Fonction pour trouver la réponse la plus pertinente en utilisant les embeddings
  */
-export async function detectIntentFromMessage(message: string, env?: any): Promise<string | null> {
-    const responses = await getMarkdownResponses(env);
-    let bestMatch: string | null = null;
-    let highestScore = 0.3; // Seuil minimal de confiance
+export async function findBestResponseWithEmbeddings(query: string, env?: any): Promise<string | null> {
+    try {
+        // Récupérer toutes les réponses
+        const responses = await getMarkdownResponses(env);
 
-    // Parcourir toutes les réponses et leurs patterns
-    for (const [responseId, response] of Object.entries(responses)) {
-        // Ignorer la réponse par défaut qui n'a pas de patterns
-        if (responseId === "default" || !response.patterns.length) continue;
-
-        for (const pattern of response.patterns) {
-            const score = calculateSimilarity(message, pattern);
-            if (score > highestScore) {
-                highestScore = score;
-                bestMatch = responseId;
-            }
+        // Ignorer les recherches très courtes
+        if (query.length < 5) {
+            return null;
         }
-    }
 
-    return bestMatch;
+        // Convertir les réponses en format compatible
+        const documents = responsesToEmbeddingData(responses);
+
+        // Filtrer les documents qui n'ont pas d'embedding
+        const validDocuments = documents.filter((doc) => doc.embedding && doc.embedding.length > 0);
+
+        // Si aucun document valide, retourner null
+        if (validDocuments.length === 0) {
+            console.log("Aucun document avec embedding trouvé");
+            return null;
+        }
+
+        // Trouver le document le plus similaire avec un seuil de similarité plus bas (0.5)
+        const result = await findMostSimilarDocument(query, validDocuments, 0.5);
+
+        if (result.document?.id) {
+            console.log(`Document trouvé: ${result.document.name} avec score: ${result.similarity.toFixed(2)}`);
+            return result.document.id;
+        }
+
+        console.log(`Aucun document trouvé avec un score suffisant (max: ${result.similarity.toFixed(2)})`);
+        return null;
+    } catch (error) {
+        console.error("Erreur lors de la recherche avec embeddings:", error);
+        return null;
+    }
 }
 
 /**
  * Fonction principale pour traiter une question et obtenir une réponse
  */
 export async function processQuestion(question: string, env?: any): Promise<string> {
-    // Détecter l'intent du message
-    const intentId = await detectIntentFromMessage(question, env);
+    try {
+        // Chercher la meilleure réponse avec les embeddings
+        const embeddingMatch = await findBestResponseWithEmbeddings(question, env);
 
-    if (intentId) {
-        // Si un intent est détecté, récupérer le contenu
-        return await getResponseContent(intentId, env);
+        if (embeddingMatch) {
+            return await getResponseContent(embeddingMatch, env);
+        }
+
+        // Aucune correspondance trouvée, utiliser la réponse par défaut
+        return await getResponseContent("default", env);
+    } catch (error) {
+        console.error("Erreur lors du traitement de la question:", error);
+        return "Désolé, une erreur s'est produite lors du traitement de votre question.";
     }
-
-    // Aucun intent détecté, utiliser la réponse par défaut
-    return await getResponseContent("default", env);
 }

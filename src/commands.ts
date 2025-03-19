@@ -1,5 +1,6 @@
 import { processQuestion } from "./ai-handler";
-import { getResponseContent, registerMarkdownResponse } from "./markdown-loader";
+import { registerMarkdownResponse, getMarkdownResponses } from "./markdown-loader";
+import { generateEmbedding } from "./util/embeddings";
 
 /**
  * Definition of types for Discord commands
@@ -82,6 +83,16 @@ export const COMMANDS: Command[] = [
                 required: false
             }
         ]
+    },
+    {
+        name: "regenerate_embeddings",
+        description: "Regenerate embeddings for all stored content",
+        type: ApplicationCommandType.CHAT_INPUT
+    },
+    {
+        name: "infos",
+        description: "Display information about all available commands",
+        type: ApplicationCommandType.CHAT_INPUT
     }
 ];
 
@@ -151,7 +162,7 @@ export async function executeCommand(commandName: string, options?: any, interac
                 }
 
                 // Enregistrer la réponse markdown en passant l'objet env
-                const success = await registerMarkdownResponse(options.id, content, options.name || options.id, [], env);
+                const success = await registerMarkdownResponse(options.id, content, options.name || options.id, env);
 
                 if (success) {
                     return `La réponse "${options.id}" a été enregistrée avec succès!`;
@@ -162,6 +173,72 @@ export async function executeCommand(commandName: string, options?: any, interac
                 console.error("Erreur lors de l'enregistrement:", error);
                 return "Une erreur est survenue lors de l'enregistrement.";
             }
+        }
+
+        case "regenerate_embeddings": {
+            // Vérifier que l'utilisateur a les droits d'administrateur
+            const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
+            if (!hasAdminPermission) {
+                return "Vous n'avez pas les droits d'administrateur pour utiliser cette commande.";
+            }
+
+            try {
+                // Récupérer toutes les réponses
+                const responses = await getMarkdownResponses(env);
+
+                if (!env?.MARKDOWN_KV) {
+                    return "KV store non disponible, impossible de regénérer les embeddings.";
+                }
+
+                let count = 0;
+                const total = Object.keys(responses).length;
+
+                // Traiter chaque réponse
+                for (const [id, response] of Object.entries(responses)) {
+                    try {
+                        // Générer un nouvel embedding
+                        const embedding = await generateEmbedding(response.content);
+
+                        // Mettre à jour la réponse
+                        const updatedResponse = {
+                            ...response,
+                            embedding
+                        };
+
+                        // Sauvegarder dans KV
+                        await env.MARKDOWN_KV.put(id, JSON.stringify(updatedResponse));
+                        count++;
+                    } catch (error) {
+                        console.error(`Erreur lors de la mise à jour de l'embedding pour ${id}:`, error);
+                    }
+                }
+
+                return `Embeddings regénérés pour ${count}/${total} réponses.`;
+            } catch (error) {
+                console.error("Erreur lors de la regénération des embeddings:", error);
+                return "Une erreur est survenue lors de la regénération des embeddings.";
+            }
+        }
+
+        case "infos": {
+            const commands = COMMANDS.map((cmd) => {
+                let description = `**/${cmd.name}**: ${cmd.description}`;
+
+                if (cmd.options && cmd.options.length > 0) {
+                    const options = cmd.options
+                        .map((opt) => {
+                            const required = opt.required ? " (obligatoire)" : " (optionnel)";
+                            return `  • \`${opt.name}\`: ${opt.description}${required}`;
+                        })
+                        .join("\n");
+
+                    description += `\n${options}`;
+                }
+
+                return description;
+            }).join("\n\n");
+
+            return `# Commandes disponibles\n\n${commands}\n\n## Système de recherche sémantique\n\nCe bot utilise un système de recherche sémantique (RAG) pour trouver les réponses les plus pertinentes à vos questions. Les réponses sont automatiquement indexées avec des embeddings vectoriels pour une meilleure compréhension du contenu.`;
         }
 
         default:
