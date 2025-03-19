@@ -40,70 +40,14 @@ async function registerCommands() {
     }
 }
 
-// Function to configure bot intents
-async function configureBotIntents() {
-    try {
-        // Get current bot information
-        const botInfoResponse = await fetch(`https://discord.com/api/v10/applications/${DISCORD_APPLICATION_ID}/bot`, {
-            method: "GET",
-            headers: {
-                Authorization: `Bot ${DISCORD_TOKEN}`,
-                "Content-Type": "application/json"
-            }
-        });
-
-        if (!botInfoResponse.ok) {
-            const error = await botInfoResponse.text();
-            console.error("Error retrieving bot information:", error);
-            throw new Error(`HTTP Error: ${botInfoResponse.status} - ${error}`);
-        }
-
-        // Update intents (privileged) to allow message reading
-        // Required intents include GUILD_MESSAGES (1 << 9) and MESSAGE_CONTENT (1 << 15)
-        // https://discord.com/developers/docs/topics/gateway#message-content-intent
-        const intents = (1 << 9) | (1 << 15); // GUILD_MESSAGES | MESSAGE_CONTENT
-
-        const updateResponse = await fetch(`https://discord.com/api/v10/applications/${DISCORD_APPLICATION_ID}/bot`, {
-            method: "PATCH",
-            headers: {
-                Authorization: `Bot ${DISCORD_TOKEN}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                flags: 0, // Reset flags
-                intents: intents
-            })
-        });
-
-        if (!updateResponse.ok) {
-            const error = await updateResponse.text();
-            console.error("Error updating bot intents:", error);
-            throw new Error(`HTTP Error: ${updateResponse.status} - ${error}`);
-        }
-
-        console.log("Bot intents configured successfully to read messages");
-        return true;
-    } catch (error) {
-        console.error("Error configuring bot intents:", error);
-        console.log('IMPORTANT: You will need to manually enable the "Message Content Intent" in the Discord Developer Portal');
-        console.log(
-            'Go to https://discord.com/developers/applications, select your application, then "Bot" and enable "Message Content Intent"'
-        );
-        return false;
-    }
-}
-
 // Export functions for use in other modules
-export { registerCommands, configureBotIntents };
+export { registerCommands };
 
 // Execute operations
 async function main() {
     try {
         // Register commands
         await registerCommands();
-
-        // Configure intents
-        await configureBotIntents();
 
         console.log("Done!");
     } catch (error) {
