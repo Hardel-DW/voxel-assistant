@@ -1,5 +1,3 @@
-import { pipeline } from "@xenova/transformers";
-
 // Interface pour les embeddings
 export interface EmbeddingData {
     id?: string;
@@ -8,30 +6,59 @@ export interface EmbeddingData {
     name: string;
 }
 
-// Cache pour le modèle d'embedding
-let embeddingModel: any = null;
-
 /**
- * Obtient le modèle d'embedding
- */
-export async function getEmbeddingModel() {
-    if (!embeddingModel) {
-        embeddingModel = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-    }
-    return embeddingModel;
-}
-
-/**
- * Génère un embedding pour un texte
+ * Fonction simple pour générer un pseudo-embedding qui fonctionne dans tous les environnements
+ * Cette approche utilise un hachage simple des mots pour créer un vecteur d'embedding
+ * Ce n'est pas aussi performant qu'un vrai modèle ML, mais ça fonctionne partout
  * @param text Texte à encoder
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
     try {
-        const model = await getEmbeddingModel();
-        const result = await model(text, { pooling: "mean", normalize: true });
+        // Normaliser le texte
+        const normalizedText = text
+            .toLowerCase()
+            .replace(/[^\w\s]/g, " ") // Remplacer la ponctuation par des espaces
+            .replace(/\s+/g, " ") // Réduire les espaces multiples
+            .trim();
 
-        // Convertir le tensor en array JavaScript standard
-        return Array.from(result.data);
+        // Découper en mots et filtrer les mots vides
+        const words = normalizedText
+            .split(" ")
+            .filter((word) => word.length > 2) // Ignorer les mots très courts
+            .slice(0, 100); // Limiter le nombre de mots
+
+        // Créer un dictionnaire de mots uniques
+        const uniqueWords = [...new Set(words)];
+
+        // Dimension de l'embedding (plus petit que les vrais embeddings, mais suffisant)
+        const dimension = 64;
+        const embedding = new Array(dimension).fill(0);
+
+        // Pour chaque mot, calculer sa contribution à l'embedding
+        for (const word of uniqueWords) {
+            // Fonction de hachage simple pour convertir un mot en nombre
+            let hash = 0;
+            for (let i = 0; i < word.length; i++) {
+                hash = (hash << 5) - hash + word.charCodeAt(i);
+                hash |= 0; // Convertir en entier 32 bits
+            }
+
+            // Distribuer la valeur du hash dans plusieurs dimensions
+            for (let i = 0; i < dimension; i++) {
+                const value = (hash + i * 37) % 997; // Nombre premier pour meilleure distribution
+                embedding[i] += (value / 997) * 2 - 1; // Normaliser entre -1 et 1
+            }
+        }
+
+        // Normaliser le vecteur (important pour la similarité cosinus)
+        const norm = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+        if (norm > 0) {
+            for (let i = 0; i < dimension; i++) {
+                embedding[i] /= norm;
+            }
+        }
+
+        return embedding;
     } catch (error) {
         console.error("Erreur lors de la génération de l'embedding:", error);
         throw error;
