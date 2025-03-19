@@ -1,5 +1,5 @@
 import { processQuestion } from "./ai-handler";
-import { registerMarkdownResponse, getMarkdownResponses } from "./markdown-loader";
+import { registerMarkdownResponse, getMarkdownResponses, getResponseContent } from "./markdown-loader";
 import { generateEmbedding } from "./util/embeddings";
 
 /**
@@ -93,6 +93,24 @@ export const COMMANDS: Command[] = [
         name: "infos",
         description: "Display information about all available commands",
         type: ApplicationCommandType.CHAT_INPUT
+    },
+    {
+        name: "list_ids",
+        description: "List all IDs stored in the database",
+        type: ApplicationCommandType.CHAT_INPUT
+    },
+    {
+        name: "view_content",
+        description: "View the markdown content of an element by its ID",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "id",
+                description: "ID of the content to view",
+                type: 3, // String type
+                required: true
+            }
+        ]
     }
 ];
 
@@ -239,6 +257,67 @@ export async function executeCommand(commandName: string, options?: any, interac
             }).join("\n\n");
 
             return `# Commandes disponibles\n\n${commands}\n\n## Système de recherche sémantique\n\nCe bot utilise un système de recherche sémantique (RAG) pour trouver les réponses les plus pertinentes à vos questions. Les réponses sont automatiquement indexées avec des embeddings vectoriels pour une meilleure compréhension du contenu.`;
+        }
+
+        case "list_ids": {
+            try {
+                // Vérifier que l'utilisateur a les droits d'administrateur
+                const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
+                if (!hasAdminPermission) {
+                    return "Vous n'avez pas les droits d'administrateur pour utiliser cette commande.";
+                }
+
+                // Récupérer toutes les réponses
+                const responses = await getMarkdownResponses(env);
+
+                if (Object.keys(responses).length === 0) {
+                    return "Aucun contenu n'est enregistré dans la base de données.";
+                }
+
+                // Formater la liste des IDs avec leurs noms
+                const idList = Object.entries(responses)
+                    .map(([id, response]) => {
+                        return `- **${id}**: ${response.name}`;
+                    })
+                    .join("\n");
+
+                return `# Contenu enregistré\n\n${idList}`;
+            } catch (error) {
+                console.error("Erreur lors de la récupération des IDs:", error);
+                return "Une erreur est survenue lors de la récupération des IDs.";
+            }
+        }
+
+        case "view_content": {
+            try {
+                if (!options?.id) {
+                    return "Vous devez fournir un ID valide.";
+                }
+
+                // Récupérer le contenu de la réponse
+                const content = await getResponseContent(options.id, env);
+
+                // Si c'est la réponse par défaut et que l'ID n'est pas "default", ça signifie que l'ID n'existe pas
+                const responses = await getMarkdownResponses(env);
+                if (content === responses.default?.content && options.id !== "default") {
+                    return `Aucun contenu trouvé avec l'ID "${options.id}".`;
+                }
+
+                // Ajouter l'ID et le nom dans l'en-tête
+                const response = responses[options.id];
+                const header = `# ${response.name} (ID: ${options.id})\n\n`;
+
+                // Limiter la longueur pour Discord (max 2000 caractères)
+                let finalContent = `${header}${content}`;
+                if (finalContent.length > 1950) {
+                    finalContent = `${finalContent.substring(0, 1950)}...\n(Contenu tronqué)`;
+                }
+
+                return finalContent;
+            } catch (error) {
+                console.error("Erreur lors de la récupération du contenu:", error);
+                return "Une erreur est survenue lors de la récupération du contenu.";
+            }
         }
 
         default:
