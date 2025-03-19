@@ -117,7 +117,10 @@ export async function readMarkdownResponsesForWorker(): Promise<MarkdownResponse
 }`;
 
                 // Remplacer la fonction dans le code
-                return code.replace(/export async function readMarkdownResponsesForWorker\(\)[^}]*}/, replacementFunction);
+                return code.replace(
+                    /export async function readMarkdownResponsesForWorker\(\)[\s\S]*?return\s+\{[\s\S]*?\}\s*;\s*\}/,
+                    replacementFunction
+                );
             }
 
             return code;
