@@ -26,8 +26,22 @@ export async function findBestResponseWithEmbeddings(query: string, env?: any): 
             return null;
         }
 
-        // Trouver le document le plus similaire avec un seuil de similarité plus bas (0.5)
-        const result = await findMostSimilarDocument(query, validDocuments, 0.5);
+        // Loggons les documents disponibles
+        console.log(`Documents disponibles: ${validDocuments.length}`);
+        for (const doc of validDocuments) {
+            console.log(`- Document: ${doc.id}, Nom: ${doc.name}`);
+        }
+
+        // Trouver le document le plus similaire avec un seuil de similarité plus bas (0.3)
+        const result = await findMostSimilarDocument(query, validDocuments, 0.3);
+
+        // Log détaillé pour le débogage
+        console.log(`Requête: "${query}"`);
+        console.log(`Meilleur score: ${result.similarity.toFixed(4)}`);
+        if (result.document) {
+            console.log(`Document trouvé: ${result.document.name}`);
+            console.log(`Contenu: ${result.document.content.substring(0, 50)}...`);
+        }
 
         if (result.document?.id) {
             console.log(`Document trouvé: ${result.document.name} avec score: ${result.similarity.toFixed(2)}`);
