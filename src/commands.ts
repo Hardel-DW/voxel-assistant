@@ -1,5 +1,5 @@
 import { processQuestion } from "./ai-handler";
-import { getResponseContent } from "./markdown-loader";
+import { getResponseContent, registerMarkdownResponse } from "./markdown-loader";
 
 /**
  * Definition of types for Discord commands
@@ -67,6 +67,31 @@ export const COMMANDS: Command[] = [
                 required: true
             }
         ]
+    },
+    {
+        name: "register",
+        description: "Register a message as a markdown response",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "id",
+                description: "ID unique for the response",
+                type: 3, // String type
+                required: true
+            },
+            {
+                name: "message_id",
+                description: "ID of the message to register",
+                type: 3, // String type
+                required: true
+            },
+            {
+                name: "name",
+                description: "Display name for the response",
+                type: 3, // String type
+                required: false
+            }
+        ]
     }
 ];
 
@@ -76,7 +101,7 @@ export const COMMANDS: Command[] = [
  * @param options Options passées à la commande
  * @returns Response content or null if the command doesn't exist
  */
-export async function executeCommand(commandName: string, options?: any): Promise<string | null> {
+export async function executeCommand(commandName: string, options?: any, interaction?: any): Promise<string | null> {
     switch (commandName) {
         case "foo":
             return "Hello World";
@@ -101,6 +126,59 @@ export async function executeCommand(commandName: string, options?: any): Promis
 
             // Utiliser notre système d'IA pour générer une réponse
             return await processQuestion(question);
+        }
+
+        case "register": {
+            if (!options?.id || !options?.message_id) {
+                return "Vous devez fournir un ID et un message_id!";
+            }
+
+            // Vérifier que l'utilisateur a les droits d'administrateur
+            const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
+            if (!hasAdminPermission) {
+                return "Vous n'avez pas les droits d'administrateur pour utiliser cette commande.";
+            }
+
+            try {
+                // Récupérer le message via l'API Discord
+                const channelId = interaction.channel_id;
+                const messageId = options.message_id;
+                const token = process.env.DISCORD_BOT_TOKEN;
+
+                if (!token) {
+                    return "Token Discord non disponible.";
+                }
+
+                // Récupérer le message depuis l'API Discord
+                const messageResponse = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
+                    headers: {
+                        Authorization: `Bot ${token}`
+                    }
+                });
+
+                if (!messageResponse.ok) {
+                    return `Erreur lors de la récupération du message: ${messageResponse.status} ${messageResponse.statusText}`;
+                }
+
+                const message = await messageResponse.json();
+                const content = message.content;
+
+                if (!content) {
+                    return "Le message ne contient pas de texte.";
+                }
+
+                // Enregistrer la réponse markdown
+                const success = await registerMarkdownResponse(options.id, content, options.name || options.id);
+
+                if (success) {
+                    return `La réponse "${options.id}" a été enregistrée avec succès!`;
+                }
+
+                return "Erreur lors de l'enregistrement de la réponse.";
+            } catch (error) {
+                console.error("Erreur lors de l'enregistrement:", error);
+                return "Une erreur est survenue lors de l'enregistrement.";
+            }
         }
 
         default:

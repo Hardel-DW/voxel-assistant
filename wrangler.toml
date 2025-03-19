@@ -9,6 +9,10 @@ compatibility_date="2023-05-18"
 [build]
 command = "npm run build"
 
+[[kv_namespaces]]
+binding = "MARKDOWN_KV"
+id = "66b8e8a93ca3416a96f1de229d0784e8"
+
 # Secrets à configurer avec wrangler:
 # DISCORD_TOKEN
 # DISCORD_PUBLIC_KEY
