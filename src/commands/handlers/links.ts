@@ -1,11 +1,35 @@
 import { addRecommendedLink, getMarkdownResponses, removeRecommendedLink } from "../../markdown-loader";
 import type { CommandHandler } from "../types";
 
-export const handleLinks: CommandHandler = async (options, interaction, env) => {
+export const handleLinks: CommandHandler = async (originalOptions, interaction, env) => {
+    console.log("Options reçues:", JSON.stringify(originalOptions));
+    console.log("Interaction reçue:", JSON.stringify(interaction));
+
+    // Extraire les options de l'interaction si elles sont vides
+    let options = originalOptions || {};
+    if (Object.keys(options).length === 0 && interaction?.data?.options) {
+        // Reconstruire l'objet options à partir de l'interaction
+        const subCommandGroup = interaction.data.options[0];
+        if (subCommandGroup) {
+            const subCommandName = subCommandGroup.name;
+            options = {
+                [subCommandName]: {}
+            };
+
+            // Ajouter les options du sous-groupe
+            if (subCommandGroup.options) {
+                for (const opt of subCommandGroup.options) {
+                    options[subCommandName][opt.name] = opt.value;
+                }
+            }
+        }
+    }
+
+    console.log("Options utilisées:", JSON.stringify(options));
+
     // Vérifier que l'utilisateur a les droits d'administrateur pour add/remove
     const subCommand = options ? Object.keys(options)[0] : null;
 
-    console.log("Options reçues:", JSON.stringify(options));
     console.log("Sous-commande détectée:", subCommand);
 
     if ((subCommand === "add" || subCommand === "remove") && interaction) {
@@ -15,7 +39,7 @@ export const handleLinks: CommandHandler = async (options, interaction, env) => 
         }
     }
 
-    if (!subCommand || !options) {
+    if (!subCommand) {
         return "Vous devez spécifier une sous-commande (add, remove ou view).";
     }
 
