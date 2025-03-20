@@ -106,9 +106,8 @@ function getDefaultResponses(): MarkdownResponsesCache {
  * Récupère le contenu d'une réponse par son identifiant
  * @param id Identifiant de la réponse
  * @param env L'objet env de Cloudflare Workers contenant le binding KV
- * @param includeRecommendations Si true, ajoute une section avec les articles recommandés
  */
-export async function getResponseContent(id: string, env?: any, includeRecommendations = false): Promise<string> {
+export async function getResponseContent(id: string, env?: any): Promise<string> {
     const responses = await getMarkdownResponses(env);
     const response = responses[id];
 
@@ -116,20 +115,7 @@ export async function getResponseContent(id: string, env?: any, includeRecommend
         return responses.default?.content || "Je ne comprends pas votre question.";
     }
 
-    let content = response.content;
-
-    // Ajouter les recommandations si demandé
-    if (includeRecommendations && response.recommendedIds && response.recommendedIds.length > 0) {
-        content += "\n\n## Articles recommandés\n";
-        for (const recId of response.recommendedIds) {
-            const recResponse = responses[recId];
-            if (recResponse) {
-                content += `- **${recId}**: ${recResponse.name}\n`;
-            }
-        }
-    }
-
-    return content;
+    return response.content;
 }
 
 /**

@@ -1,6 +1,7 @@
 import { InteractionType, verifyKey } from "discord-interactions";
-import { processQuestion } from "./ai-handler";
+import { findBestResponseWithEmbeddings, processQuestion } from "./ai-handler";
 import { InteractionResponseType, executeCommand } from "./commands";
+import { getMarkdownResponses } from "./markdown-loader";
 
 export interface Env {
     DISCORD_PUBLIC_KEY: string;
@@ -128,13 +129,54 @@ export default {
                     const commandResponse = await executeCommand(commandName, options, interaction, env);
 
                     if (commandResponse) {
-                        return new Response(
-                            JSON.stringify({
-                                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                                data: { content: commandResponse }
-                            }),
-                            { headers: { "Content-Type": "application/json" } }
-                        );
+                        // Structure de base de la réponse
+                        const responseData: any = {
+                            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                            data: { content: commandResponse }
+                        };
+
+                        // Si c'est une commande de type content view ou ask, ajouter les boutons pour les recommandations
+                        if ((commandName === "content" && options?.view) || commandName === "ask") {
+                            // Pour content view, on connaît l'ID directement
+                            // Pour ask, on doit demander à l'IA quel ID a été trouvé
+                            const contentId =
+                                commandName === "content"
+                                    ? options?.view?.id
+                                    : options?.question
+                                      ? await findBestResponseWithEmbeddings(options.question, env)
+                                      : null;
+
+                            if (contentId) {
+                                const responses = await getMarkdownResponses(env);
+                                const response = responses[contentId];
+
+                                // Si l'article a des recommandations, ajouter des boutons
+                                if (response?.recommendedIds && response.recommendedIds.length > 0) {
+                                    // Créer les boutons pour chaque recommandation (max 5 boutons par ligne)
+                                    const buttons = response.recommendedIds
+                                        .slice(0, 5) // Limiter à 5 recommandations max (limite Discord)
+                                        .map((recId: string) => {
+                                            const recResponse = responses[recId];
+                                            return {
+                                                type: 2, // Button
+                                                style: 1, // Primary (bleu)
+                                                label: recResponse ? recResponse.name.slice(0, 80) : recId, // Limiter la longueur
+                                                custom_id: `view_${recId}` // ID utilisé pour l'interaction
+                                            };
+                                        });
+
+                                    // Ajouter les boutons à la réponse
+                                    responseData.data.components = [
+                                        {
+                                            type: 1, // Action Row
+                                            components: buttons
+                                        }
+                                    ];
+                                }
+                            }
+                        }
+
+                        return new Response(JSON.stringify(responseData), { headers: { "Content-Type": "application/json" } });
                     }
 
                     return new Response(
