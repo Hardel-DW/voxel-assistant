@@ -5,6 +5,9 @@ export const handleLinks: CommandHandler = async (options, interaction, env) => 
     // Vérifier que l'utilisateur a les droits d'administrateur pour add/remove
     const subCommand = options ? Object.keys(options)[0] : null;
 
+    console.log("Options reçues:", JSON.stringify(options));
+    console.log("Sous-commande détectée:", subCommand);
+
     if ((subCommand === "add" || subCommand === "remove") && interaction) {
         const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
         if (!hasAdminPermission) {
@@ -23,12 +26,24 @@ export const handleLinks: CommandHandler = async (options, interaction, env) => 
                 const targetId = options.add?.target_id;
                 const recommendedId = options.add?.recommended_id;
 
+                console.log("Paramètres add:", { targetId, recommendedId });
+
                 if (!targetId || !recommendedId) {
                     return "Vous devez fournir les IDs de l'article cible et de l'article recommandé.";
                 }
 
+                // Vérifier que les IDs existent dans la base
+                const responses = await getMarkdownResponses(env);
+                if (!responses[targetId]) {
+                    return `Erreur: L'article cible avec l'ID "${targetId}" n'existe pas.`;
+                }
+                if (!responses[recommendedId]) {
+                    return `Erreur: L'article recommandé avec l'ID "${recommendedId}" n'existe pas.`;
+                }
+
                 // Ajouter le lien
                 const result = await addRecommendedLink(targetId, recommendedId, env);
+                console.log("Résultat add:", result);
 
                 if (result.success) {
                     return `${result.message}\nLiens actuels: ${result.currentLinks?.join(", ") || "aucun"}`;

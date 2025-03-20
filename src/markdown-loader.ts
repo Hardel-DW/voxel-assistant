@@ -320,14 +320,23 @@ export async function addRecommendedLink(
     env?: any
 ): Promise<{ success: boolean; message: string; currentLinks?: string[] }> {
     try {
+        console.log("Début addRecommendedLink:", { targetId, recommendedId });
+
         if (!env?.MARKDOWN_KV) {
+            console.error("KV store not available dans addRecommendedLink");
             return { success: false, message: "KV store not available" };
         }
 
         // Vérifier que les deux articles existent
+        console.log("Chargement des réponses...");
         const responses = await getMarkdownResponses(env);
+        console.log("Réponses chargées, IDs disponibles:", Object.keys(responses));
+
         const targetResponse = responses[targetId];
         const recommendedResponse = responses[recommendedId];
+
+        console.log("Réponse cible trouvée:", !!targetResponse, "ID:", targetId);
+        console.log("Réponse recommandée trouvée:", !!recommendedResponse, "ID:", recommendedId);
 
         if (!targetResponse) {
             return { success: false, message: `Aucun article trouvé avec l'ID "${targetId}"` };
@@ -344,9 +353,11 @@ export async function addRecommendedLink(
 
         // Fusionner les liens existants avec le nouveau
         const existingLinks = targetResponse.recommendedIds || [];
+        console.log("Liens existants:", existingLinks);
 
         // Vérifier si le lien existe déjà
         if (existingLinks.includes(recommendedId)) {
+            console.log("Lien déjà existant");
             return {
                 success: false,
                 message: `L'article "${recommendedId}" est déjà lié à "${targetId}"`,
@@ -355,6 +366,7 @@ export async function addRecommendedLink(
         }
 
         const newLinks = [...existingLinks, recommendedId];
+        console.log("Nouveaux liens:", newLinks);
 
         // Mettre à jour la réponse
         const updatedResponse: MarkdownResponse = {
@@ -363,9 +375,20 @@ export async function addRecommendedLink(
         };
 
         // Sauvegarder dans KV
-        await env.MARKDOWN_KV.put(targetId, JSON.stringify(updatedResponse));
+        console.log("Sauvegarde dans KV...");
+        try {
+            await env.MARKDOWN_KV.put(targetId, JSON.stringify(updatedResponse));
+            console.log("Sauvegarde réussie");
+        } catch (kvError: unknown) {
+            console.error("Erreur lors de la sauvegarde dans KV:", kvError);
+            return {
+                success: false,
+                message: `Erreur lors de la sauvegarde: ${kvError instanceof Error ? kvError.message : "erreur inconnue"}`
+            };
+        }
 
         // Invalider le cache
+        console.log("Invalidation du cache");
         invalidateCache();
 
         return {
@@ -375,7 +398,10 @@ export async function addRecommendedLink(
         };
     } catch (error) {
         console.error("Erreur lors de l'ajout de recommandation:", error);
-        return { success: false, message: "Erreur lors de l'ajout de la recommandation" };
+        return {
+            success: false,
+            message: `Erreur lors de l'ajout de la recommandation: ${error instanceof Error ? error.message : "erreur inconnue"}`
+        };
     }
 }
 
