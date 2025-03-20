@@ -3,29 +3,36 @@ import type { CommandHandler } from "../types";
 
 export const handleLinks: CommandHandler = async (originalOptions, interaction, env) => {
     console.log("Options reçues:", JSON.stringify(originalOptions));
-    console.log("Interaction reçue:", JSON.stringify(interaction));
 
-    // Extraire les options de l'interaction si elles sont vides
+    // Extraire les options directement depuis l'interaction
     let options = originalOptions || {};
+
     if (Object.keys(options).length === 0 && interaction?.data?.options) {
-        // Reconstruire l'objet options à partir de l'interaction
+        // On sait que l'interaction contient une sous-commande (add, view, remove)
         const subCommandGroup = interaction.data.options[0];
+
         if (subCommandGroup) {
-            const subCommandName = subCommandGroup.name;
+            const subCommandName = subCommandGroup.name; // 'add', 'view' ou 'remove'
+
+            // Créer la structure de base
             options = {
                 [subCommandName]: {}
             };
 
-            // Ajouter les options du sous-groupe
-            if (subCommandGroup.options) {
-                for (const opt of subCommandGroup.options) {
-                    options[subCommandName][opt.name] = opt.value;
+            // Récupérer les sous-options (les paramètres de la commande)
+            if (subCommandGroup.options && Array.isArray(subCommandGroup.options)) {
+                // Pour chaque paramètre (target_id, recommended_id, etc.)
+                for (const param of subCommandGroup.options) {
+                    if (param.name && param.value !== undefined) {
+                        // Ajouter le paramètre à la sous-commande
+                        options[subCommandName][param.name] = param.value;
+                    }
                 }
             }
         }
     }
 
-    console.log("Options utilisées:", JSON.stringify(options));
+    console.log("Options extraites:", JSON.stringify(options));
 
     // Vérifier que l'utilisateur a les droits d'administrateur pour add/remove
     const subCommand = options ? Object.keys(options)[0] : null;
