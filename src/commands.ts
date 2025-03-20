@@ -1,5 +1,12 @@
 import { processQuestion } from "./ai-handler";
-import { registerMarkdownResponse, getMarkdownResponses, getResponseContent, invalidateCache } from "./markdown-loader";
+import {
+    registerMarkdownResponse,
+    getMarkdownResponses,
+    getResponseContent,
+    invalidateCache,
+    addKeywordsToResponse,
+    removeKeywordsFromResponse
+} from "./markdown-loader";
 import { generateEmbedding } from "./util/embeddings";
 
 /**
@@ -81,6 +88,12 @@ export const COMMANDS: Command[] = [
                 description: "Display name for the response",
                 type: 3, // String type
                 required: false
+            },
+            {
+                name: "keywords",
+                description: "Keywords for better search (comma separated)",
+                type: 3, // String type
+                required: false
             }
         ]
     },
@@ -120,6 +133,57 @@ export const COMMANDS: Command[] = [
             {
                 name: "id",
                 description: "ID of the content to delete",
+                type: 3, // String type
+                required: true
+            }
+        ]
+    },
+    {
+        name: "add_keywords",
+        description: "Add keywords to an existing response",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "id",
+                description: "ID of the response",
+                type: 3, // String type
+                required: true
+            },
+            {
+                name: "keywords",
+                description: "Keywords to add (comma separated)",
+                type: 3, // String type
+                required: true
+            }
+        ]
+    },
+    {
+        name: "remove_keywords",
+        description: "Remove keywords from an existing response",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "id",
+                description: "ID of the response",
+                type: 3, // String type
+                required: true
+            },
+            {
+                name: "keywords",
+                description: "Keywords to remove (comma separated, leave empty to remove all)",
+                type: 3, // String type
+                required: false
+            }
+        ]
+    },
+    {
+        name: "view_keywords",
+        description: "View keywords for a response",
+        type: ApplicationCommandType.CHAT_INPUT,
+        options: [
+            {
+                name: "id",
+                description: "ID of the response",
                 type: 3, // String type
                 required: true
             }
@@ -192,11 +256,24 @@ export async function executeCommand(commandName: string, options?: any, interac
                     return "Le message ne contient pas de texte.";
                 }
 
+                // Traiter les mots-clés s'ils sont fournis
+                let keywords: string[] = [];
+                if (options.keywords) {
+                    keywords = options.keywords
+                        .split(",")
+                        .map((k: string) => k.trim())
+                        .filter((k: string) => k.length > 0);
+                }
+
                 // Enregistrer la réponse markdown en passant l'objet env
-                const success = await registerMarkdownResponse(options.id, content, options.name || options.id, env);
+                const success = await registerMarkdownResponse(options.id, content, options.name || options.id, keywords, env);
 
                 if (success) {
-                    return `La réponse "${options.id}" a été enregistrée avec succès!`;
+                    let message = `La réponse "${options.id}" a été enregistrée avec succès!`;
+                    if (keywords.length > 0) {
+                        message += ` (${keywords.length} mots-clés ajoutés)`;
+                    }
+                    return message;
                 }
 
                 return "Erreur lors de l'enregistrement de la réponse.";
@@ -370,6 +447,112 @@ export async function executeCommand(commandName: string, options?: any, interac
             } catch (error) {
                 console.error("Erreur lors de la suppression de l'élément:", error);
                 return "Une erreur est survenue lors de la suppression de l'élément.";
+            }
+        }
+
+        case "add_keywords": {
+            try {
+                // Vérifier que l'utilisateur a les droits d'administrateur
+                const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
+                if (!hasAdminPermission) {
+                    return "Vous n'avez pas les droits d'administrateur pour utiliser cette commande.";
+                }
+
+                if (!options?.id || !options?.keywords) {
+                    return "Vous devez fournir un ID et des mots-clés!";
+                }
+
+                // Traiter les mots-clés
+                const keywords = options.keywords
+                    .split(",")
+                    .map((k: string) => k.trim())
+                    .filter((k: string) => k.length > 0);
+
+                if (keywords.length === 0) {
+                    return "Vous devez fournir au moins un mot-clé valide!";
+                }
+
+                // Ajouter les mots-clés
+                const result = await addKeywordsToResponse(options.id, keywords, env);
+
+                if (result.success) {
+                    return `${result.message}\nMots-clés actuels: ${result.currentKeywords?.join(", ") || "aucun"}`;
+                }
+
+                return `Erreur: ${result.message}`;
+            } catch (error) {
+                console.error("Erreur lors de l'ajout des mots-clés:", error);
+                return "Une erreur est survenue lors de l'ajout des mots-clés.";
+            }
+        }
+
+        case "remove_keywords": {
+            try {
+                // Vérifier que l'utilisateur a les droits d'administrateur
+                const hasAdminPermission = interaction?.member?.permissions?.includes("8") || false;
+                if (!hasAdminPermission) {
+                    return "Vous n'avez pas les droits d'administrateur pour utiliser cette commande.";
+                }
+
+                if (!options?.id) {
+                    return "Vous devez fournir un ID!";
+                }
+
+                // Traiter les mots-clés (si fournis)
+                let keywords: string[] | undefined;
+                if (options.keywords) {
+                    keywords = options.keywords
+                        .split(",")
+                        .map((k: string) => k.trim())
+                        .filter((k: string) => k.length > 0);
+                    if (keywords && keywords.length === 0) {
+                        keywords = undefined; // Supprimer tous les mots-clés si la liste est vide
+                    }
+                }
+
+                // Supprimer les mots-clés
+                const result = await removeKeywordsFromResponse(options.id, keywords || [], env);
+
+                if (result.success) {
+                    let message = `${result.message}`;
+                    if (result.removedKeywords && result.removedKeywords.length > 0) {
+                        message += `\nMots-clés supprimés: ${result.removedKeywords.join(", ")}`;
+                    }
+                    message += `\nMots-clés restants: ${result.currentKeywords?.join(", ") || "aucun"}`;
+                    return message;
+                }
+
+                return `Erreur: ${result.message}`;
+            } catch (error) {
+                console.error("Erreur lors de la suppression des mots-clés:", error);
+                return "Une erreur est survenue lors de la suppression des mots-clés.";
+            }
+        }
+
+        case "view_keywords": {
+            try {
+                if (!options?.id) {
+                    return "Vous devez fournir un ID!";
+                }
+
+                // Récupérer les réponses
+                const responses = await getMarkdownResponses(env);
+                const response = responses[options.id];
+
+                if (!response) {
+                    return `Aucune réponse trouvée avec l'ID "${options.id}".`;
+                }
+
+                const keywords = response.keywords || [];
+
+                if (keywords.length === 0) {
+                    return `La réponse "${options.id}" n'a pas de mots-clés.`;
+                }
+
+                return `Mots-clés pour "${options.id}" (${response.name}):\n\n${keywords.join(", ")}`;
+            } catch (error) {
+                console.error("Erreur lors de l'affichage des mots-clés:", error);
+                return "Une erreur est survenue lors de l'affichage des mots-clés.";
             }
         }
 

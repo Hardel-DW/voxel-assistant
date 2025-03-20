@@ -18,8 +18,9 @@ interface SearchResult {
  * Calcule un score de correspondance directe basé sur les mots-clés
  * @param query Requête de l'utilisateur
  * @param content Contenu à comparer
+ * @param manualKeywords Mots-clés manuels qui ont plus de poids
  */
-function calculateKeywordMatchScore(query: string, content: string): number {
+function calculateKeywordMatchScore(query: string, content: string, manualKeywords?: string[]): number {
     // Normaliser textes
     const normalizedQuery = query
         .toLowerCase()
@@ -40,14 +41,40 @@ function calculateKeywordMatchScore(query: string, content: string): number {
 
     // Compter les mots-clés trouvés dans le contenu
     let matchCount = 0;
+    let manualMatchCount = 0;
+    let manualKeywordCount = 0;
+
+    // Vérifier les correspondances avec les mots-clés manuels (si présents)
+    if (manualKeywords && manualKeywords.length > 0) {
+        manualKeywordCount = manualKeywords.length;
+        for (const word of uniqueQueryWords) {
+            for (const keyword of manualKeywords) {
+                if (keyword.toLowerCase().includes(word) || word.includes(keyword.toLowerCase())) {
+                    manualMatchCount++;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Vérifier les correspondances dans le contenu normal
     for (const word of uniqueQueryWords) {
         if (normalizedContent.includes(word)) {
             matchCount++;
         }
     }
 
-    // Calculer le score: % de mots-clés trouvés
-    return matchCount / uniqueQueryWords.length;
+    // Calculer le score: % de mots-clés trouvés (contenu) + bonus pour les mots-clés manuels
+    const contentScore = matchCount / uniqueQueryWords.length;
+
+    // Si aucun mot-clé manuel, retourner simplement le score de contenu
+    if (!manualKeywords || manualKeywordCount === 0) {
+        return contentScore;
+    }
+
+    // Sinon, calculer un score pondéré (les mots-clés manuels ont un poids plus important)
+    const manualScore = manualMatchCount / uniqueQueryWords.length;
+    return contentScore * 0.3 + manualScore * 0.7; // 70% pour les mots-clés manuels, 30% pour le contenu
 }
 
 /**
@@ -71,8 +98,8 @@ export async function findBestResponseWithEmbeddings(query: string, env?: any): 
         const results: SearchResult[] = [];
 
         for (const doc of documents) {
-            // Score par mots-clés (0-1)
-            const keywordScore = calculateKeywordMatchScore(query, doc.content);
+            // Score par mots-clés (0-1), en utilisant les mots-clés manuels s'ils existent
+            const keywordScore = calculateKeywordMatchScore(query, doc.content, doc.keywords);
 
             // On calcule le score embedding si on a un embedding
             if (doc.embedding && doc.embedding.length > 0) {

@@ -3,6 +3,7 @@ export interface MarkdownResponse {
     content: string;
     name: string;
     embedding?: number[];
+    keywords?: string[]; // Mots-clés choisis manuellement
 }
 
 // Interface pour le cache des réponses
@@ -120,9 +121,16 @@ export async function getResponseContent(id: string, env?: any): Promise<string>
  * @param id Identifiant de la réponse
  * @param content Contenu markdown
  * @param name Nom optionnel
+ * @param keywords Mots-clés manuels optionnels
  * @param env L'objet env de Cloudflare Workers contenant le binding KV
  */
-export async function registerMarkdownResponse(id: string, content: string, name?: string, env?: any): Promise<boolean> {
+export async function registerMarkdownResponse(
+    id: string,
+    content: string,
+    name?: string,
+    keywords?: string[],
+    env?: any
+): Promise<boolean> {
     try {
         // Accéder au KV via l'objet env
         if (!env?.MARKDOWN_KV) {
@@ -136,7 +144,8 @@ export async function registerMarkdownResponse(id: string, content: string, name
         const response: MarkdownResponse = {
             content,
             name: name || id,
-            embedding: embedding
+            embedding: embedding,
+            keywords: keywords || []
         };
 
         // Sauvegarder dans KV en utilisant le binding depuis env
@@ -145,7 +154,7 @@ export async function registerMarkdownResponse(id: string, content: string, name
         // Invalider le cache
         invalidateCache();
 
-        console.log(`Response ${id} registered successfully with embedding`);
+        console.log(`Response ${id} registered successfully with embedding and ${keywords?.length || 0} keywords`);
         return true;
     } catch (error) {
         console.error("Error registering markdown response:", error);
@@ -161,7 +170,8 @@ export function responsesToEmbeddingData(responses: MarkdownResponsesCache) {
         id,
         content: response.content,
         name: response.name,
-        embedding: response.embedding || []
+        embedding: response.embedding || [],
+        keywords: response.keywords || []
     }));
 }
 
@@ -171,4 +181,127 @@ export function responsesToEmbeddingData(responses: MarkdownResponsesCache) {
 export function invalidateCache(): void {
     responseCache = null;
     console.log("Cache des réponses invalidé");
+}
+
+/**
+ * Ajoute des mots-clés à une réponse existante
+ * @param id ID de la réponse
+ * @param keywords Mots-clés à ajouter
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
+ */
+export async function addKeywordsToResponse(
+    id: string,
+    keywords: string[],
+    env?: any
+): Promise<{ success: boolean; message: string; currentKeywords?: string[] }> {
+    try {
+        if (!env?.MARKDOWN_KV) {
+            return { success: false, message: "KV store not available" };
+        }
+
+        // Récupérer les réponses
+        const responses = await getMarkdownResponses(env);
+        const response = responses[id];
+
+        if (!response) {
+            return { success: false, message: `No response found with ID "${id}"` };
+        }
+
+        // Fusionner les mots-clés existants avec les nouveaux
+        const existingKeywords = response.keywords || [];
+        const newKeywords = [...new Set([...existingKeywords, ...keywords])]; // Éviter les doublons
+
+        // Mettre à jour la réponse
+        const updatedResponse: MarkdownResponse = {
+            ...response,
+            keywords: newKeywords
+        };
+
+        // Sauvegarder dans KV
+        await env.MARKDOWN_KV.put(id, JSON.stringify(updatedResponse));
+
+        // Invalider le cache
+        invalidateCache();
+
+        return {
+            success: true,
+            message: `Added ${keywords.length} keywords to response "${id}"`,
+            currentKeywords: newKeywords
+        };
+    } catch (error) {
+        console.error("Error adding keywords:", error);
+        return { success: false, message: "Error adding keywords" };
+    }
+}
+
+/**
+ * Supprime des mots-clés d'une réponse existante
+ * @param id ID de la réponse
+ * @param keywords Mots-clés à supprimer (si vide, supprime tous les mots-clés)
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
+ */
+export async function removeKeywordsFromResponse(
+    id: string,
+    keywords?: string[],
+    env?: any
+): Promise<{ success: boolean; message: string; removedKeywords?: string[]; currentKeywords?: string[] }> {
+    try {
+        if (!env?.MARKDOWN_KV) {
+            return { success: false, message: "KV store not available" };
+        }
+
+        // Récupérer les réponses
+        const responses = await getMarkdownResponses(env);
+        const response = responses[id];
+
+        if (!response) {
+            return { success: false, message: `No response found with ID "${id}"` };
+        }
+
+        const existingKeywords = response.keywords || [];
+
+        if (existingKeywords.length === 0) {
+            return { success: false, message: `Response "${id}" has no keywords to remove` };
+        }
+
+        let newKeywords: string[];
+        const removedKeywords: string[] = [];
+
+        // Si la liste keywords est vide, supprimer tous les mots-clés
+        if (!keywords || keywords.length === 0) {
+            removedKeywords.push(...existingKeywords);
+            newKeywords = [];
+        } else {
+            // Sinon, supprimer uniquement les mots-clés spécifiés
+            newKeywords = existingKeywords.filter((k) => {
+                const shouldRemove = keywords.includes(k);
+                if (shouldRemove) {
+                    removedKeywords.push(k);
+                }
+                return !shouldRemove;
+            });
+        }
+
+        // Mettre à jour la réponse
+        const updatedResponse: MarkdownResponse = {
+            ...response,
+            keywords: newKeywords
+        };
+
+        // Sauvegarder dans KV
+        await env.MARKDOWN_KV.put(id, JSON.stringify(updatedResponse));
+
+        // Invalider le cache
+        invalidateCache();
+
+        return {
+            success: true,
+            message: `Removed ${removedKeywords.length} keywords from response "${id}"`,
+            removedKeywords,
+            currentKeywords: newKeywords
+        };
+    } catch (error) {
+        console.error("Error removing keywords:", error);
+        return { success: false, message: "Error removing keywords" };
+    }
 }
