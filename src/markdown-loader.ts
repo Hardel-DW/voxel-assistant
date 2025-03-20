@@ -48,7 +48,9 @@ export async function getMarkdownResponses(env?: any): Promise<MarkdownResponses
                         responses[key.name] = {
                             content: parsed.content || "",
                             name: parsed.name || key.name,
-                            embedding: parsed.embedding || undefined
+                            embedding: parsed.embedding || undefined,
+                            keywords: parsed.keywords || undefined,
+                            recommendedIds: parsed.recommendedIds || undefined
                         };
                     } catch {
                         // Si ce n'est pas du JSON, considérer que c'est juste le contenu
