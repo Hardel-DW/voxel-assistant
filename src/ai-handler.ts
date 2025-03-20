@@ -178,7 +178,8 @@ export async function processQuestion(question: string, env?: any): Promise<stri
         const bestMatch = await findBestResponseWithEmbeddings(question, env);
 
         if (bestMatch) {
-            return await getResponseContent(bestMatch, env);
+            // Inclure les recommandations dans la réponse
+            return await getResponseContent(bestMatch, env, true);
         }
 
         // Aucune correspondance trouvée, utiliser la réponse par défaut

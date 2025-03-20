@@ -112,8 +112,21 @@ export const handleContent: CommandHandler = async (options, interaction, env) =
                 const response = responses[id];
                 const header = `# ${response.name} (ID: ${id})\n\n`;
 
+                // Ajouter les liens recommandés s'il y en a
+                let recommendationsSection = "";
+                if (response.recommendedIds && response.recommendedIds.length > 0) {
+                    const recommendedLinks = response.recommendedIds
+                        .map((recId) => {
+                            const recResponse = responses[recId];
+                            return recResponse ? `- **${recId}**: ${recResponse.name}` : `- **${recId}**: (article non trouvé)`;
+                        })
+                        .join("\n");
+
+                    recommendationsSection = `\n\n## Articles recommandés\n${recommendedLinks}\n\n`;
+                }
+
                 // Limiter la longueur pour Discord (max 2000 caractères)
-                let finalContent = `${header}${content}`;
+                let finalContent = `${header}${content}${recommendationsSection}`;
                 if (finalContent.length > 1950) {
                     finalContent = `${finalContent.substring(0, 1950)}...\n(Contenu tronqué)`;
                 }
