@@ -4,6 +4,7 @@ export interface MarkdownResponse {
     name: string;
     embedding?: number[];
     keywords?: string[]; // Mots-clés choisis manuellement
+    recommendedIds?: string[]; // IDs des articles recommandés
 }
 
 // Interface pour le cache des réponses
@@ -171,7 +172,8 @@ export function responsesToEmbeddingData(responses: MarkdownResponsesCache) {
         content: response.content,
         name: response.name,
         embedding: response.embedding || [],
-        keywords: response.keywords || []
+        keywords: response.keywords || [],
+        recommendedIds: response.recommendedIds || []
     }));
 }
 
@@ -303,5 +305,204 @@ export async function removeKeywordsFromResponse(
     } catch (error) {
         console.error("Error removing keywords:", error);
         return { success: false, message: "Error removing keywords" };
+    }
+}
+
+/**
+ * Ajoute un lien de recommandation à un article existant
+ * @param targetId ID de l'article cible
+ * @param recommendedId ID de l'article recommandé
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
+ */
+export async function addRecommendedLink(
+    targetId: string,
+    recommendedId: string,
+    env?: any
+): Promise<{ success: boolean; message: string; currentLinks?: string[] }> {
+    try {
+        if (!env?.MARKDOWN_KV) {
+            return { success: false, message: "KV store not available" };
+        }
+
+        // Vérifier que les deux articles existent
+        const responses = await getMarkdownResponses(env);
+        const targetResponse = responses[targetId];
+        const recommendedResponse = responses[recommendedId];
+
+        if (!targetResponse) {
+            return { success: false, message: `Aucun article trouvé avec l'ID "${targetId}"` };
+        }
+
+        if (!recommendedResponse) {
+            return { success: false, message: `L'article recommandé avec l'ID "${recommendedId}" n'existe pas` };
+        }
+
+        // Éviter de lier un article à lui-même
+        if (targetId === recommendedId) {
+            return { success: false, message: "Impossible de lier un article à lui-même" };
+        }
+
+        // Fusionner les liens existants avec le nouveau
+        const existingLinks = targetResponse.recommendedIds || [];
+
+        // Vérifier si le lien existe déjà
+        if (existingLinks.includes(recommendedId)) {
+            return {
+                success: false,
+                message: `L'article "${recommendedId}" est déjà lié à "${targetId}"`,
+                currentLinks: existingLinks
+            };
+        }
+
+        const newLinks = [...existingLinks, recommendedId];
+
+        // Mettre à jour la réponse
+        const updatedResponse: MarkdownResponse = {
+            ...targetResponse,
+            recommendedIds: newLinks
+        };
+
+        // Sauvegarder dans KV
+        await env.MARKDOWN_KV.put(targetId, JSON.stringify(updatedResponse));
+
+        // Invalider le cache
+        invalidateCache();
+
+        return {
+            success: true,
+            message: `Article "${recommendedId}" ajouté aux recommandations de "${targetId}"`,
+            currentLinks: newLinks
+        };
+    } catch (error) {
+        console.error("Erreur lors de l'ajout de recommandation:", error);
+        return { success: false, message: "Erreur lors de l'ajout de la recommandation" };
+    }
+}
+
+/**
+ * Supprime un lien de recommandation d'un article existant
+ * @param targetId ID de l'article cible
+ * @param recommendedId ID de l'article recommandé à supprimer (si undefined, supprime tous les liens)
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
+ */
+export async function removeRecommendedLink(
+    targetId: string,
+    recommendedId?: string,
+    env?: any
+): Promise<{ success: boolean; message: string; removedLinks?: string[]; currentLinks?: string[] }> {
+    try {
+        if (!env?.MARKDOWN_KV) {
+            return { success: false, message: "KV store not available" };
+        }
+
+        // Vérifier que l'article cible existe
+        const responses = await getMarkdownResponses(env);
+        const targetResponse = responses[targetId];
+
+        if (!targetResponse) {
+            return { success: false, message: `Aucun article trouvé avec l'ID "${targetId}"` };
+        }
+
+        const existingLinks = targetResponse.recommendedIds || [];
+
+        if (existingLinks.length === 0) {
+            return { success: false, message: `L'article "${targetId}" n'a aucun lien à supprimer` };
+        }
+
+        let newLinks: string[];
+        const removedLinks: string[] = [];
+
+        // Si recommendedId est undefined, supprimer tous les liens
+        if (!recommendedId) {
+            removedLinks.push(...existingLinks);
+            newLinks = [];
+        } else {
+            // Vérifier si le lien existe
+            if (!existingLinks.includes(recommendedId)) {
+                return {
+                    success: false,
+                    message: `L'article "${recommendedId}" n'est pas lié à "${targetId}"`,
+                    currentLinks: existingLinks
+                };
+            }
+
+            // Supprimer uniquement le lien spécifié
+            newLinks = existingLinks.filter((id) => {
+                const shouldRemove = id === recommendedId;
+                if (shouldRemove) {
+                    removedLinks.push(id);
+                }
+                return !shouldRemove;
+            });
+        }
+
+        // Mettre à jour la réponse
+        const updatedResponse: MarkdownResponse = {
+            ...targetResponse,
+            recommendedIds: newLinks
+        };
+
+        // Sauvegarder dans KV
+        await env.MARKDOWN_KV.put(targetId, JSON.stringify(updatedResponse));
+
+        // Invalider le cache
+        invalidateCache();
+
+        return {
+            success: true,
+            message: `${removedLinks.length} lien(s) supprimé(s) de l'article "${targetId}"`,
+            removedLinks,
+            currentLinks: newLinks
+        };
+    } catch (error) {
+        console.error("Erreur lors de la suppression de lien:", error);
+        return { success: false, message: "Erreur lors de la suppression du lien" };
+    }
+}
+
+/**
+ * Nettoie les liens vers un article qui a été supprimé
+ * Cette fonction doit être appelée lors de la suppression d'un article
+ * @param deletedId ID de l'article supprimé
+ * @param env L'objet env de Cloudflare Workers contenant le binding KV
+ */
+export async function cleanupDeletedArticleLinks(deletedId: string, env?: any): Promise<number> {
+    try {
+        if (!env?.MARKDOWN_KV) {
+            return 0;
+        }
+
+        const responses = await getMarkdownResponses(env);
+        let updatedCount = 0;
+
+        // Parcourir tous les articles pour trouver ceux qui ont un lien vers l'article supprimé
+        for (const [id, response] of Object.entries(responses)) {
+            const links = response.recommendedIds || [];
+
+            if (links.includes(deletedId)) {
+                // Supprimer le lien vers l'article supprimé
+                const updatedLinks = links.filter((linkId) => linkId !== deletedId);
+
+                // Mettre à jour l'article
+                const updatedResponse: MarkdownResponse = {
+                    ...response,
+                    recommendedIds: updatedLinks
+                };
+
+                // Sauvegarder dans KV
+                await env.MARKDOWN_KV.put(id, JSON.stringify(updatedResponse));
+                updatedCount++;
+            }
+        }
+
+        if (updatedCount > 0) {
+            // Invalider le cache si des modifications ont été faites
+            invalidateCache();
+        }
+
+        return updatedCount;
+    } catch (error) {
+        console.error("Erreur lors du nettoyage des liens:", error);
+        return 0;
     }
 }

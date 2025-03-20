@@ -5,6 +5,7 @@ export interface EmbeddingData {
     embedding: number[];
     name: string;
     keywords?: string[];
+    recommendedIds?: string[];
 }
 
 /**
