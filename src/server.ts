@@ -1,6 +1,6 @@
 import { InteractionType, verifyKey } from "discord-interactions";
-import { InteractionResponseType, executeCommand } from "./commands";
 import { processQuestion } from "./ai-handler";
+import { InteractionResponseType, executeCommand } from "./commands";
 
 export interface Env {
     DISCORD_PUBLIC_KEY: string;
