@@ -97,12 +97,32 @@ export default {
                 // Répondre aux commandes slash
                 if (interaction.type === InteractionType.APPLICATION_COMMAND) {
                     const commandName = interaction.data.name;
-                    const options = interaction.data.options
-                        ? interaction.data.options.reduce((acc: any, option: any) => {
-                              acc[option.name] = option.value;
-                              return acc;
-                          }, {})
-                        : undefined;
+
+                    // Construire la structure d'options en préservant la hiérarchie des sous-commandes
+                    let options: Record<string, any> | undefined = undefined;
+
+                    if (interaction.data.options && Array.isArray(interaction.data.options) && interaction.data.options.length > 0) {
+                        options = {};
+
+                        for (const option of interaction.data.options) {
+                            // Pour les sous-commandes (type 1) ou groupes (type 2), préserver la structure hiérarchique
+                            if (option.type === 1 || option.type === 2) {
+                                options[option.name] = {};
+
+                                // Traiter les options de la sous-commande
+                                if (option.options && Array.isArray(option.options)) {
+                                    for (const subOption of option.options) {
+                                        options[option.name][subOption.name] = subOption.value;
+                                    }
+                                }
+                            } else {
+                                // Options simples pour les commandes de base
+                                options[option.name] = option.value;
+                            }
+                        }
+                    }
+
+                    console.log("Options construites:", JSON.stringify(options));
 
                     // Exécuter la commande de manière asynchrone en passant l'objet interaction et env
                     const commandResponse = await executeCommand(commandName, options, interaction, env);

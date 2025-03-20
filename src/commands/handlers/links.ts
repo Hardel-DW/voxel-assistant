@@ -1,42 +1,12 @@
 import { addRecommendedLink, getMarkdownResponses, removeRecommendedLink } from "../../markdown-loader";
 import type { CommandHandler } from "../types";
 
-export const handleLinks: CommandHandler = async (originalOptions, interaction, env) => {
-    console.log("Options reçues:", JSON.stringify(originalOptions));
-
-    // Extraire les options directement depuis l'interaction
-    let options = originalOptions || {};
-
-    if (Object.keys(options).length === 0 && interaction?.data?.options) {
-        // On sait que l'interaction contient une sous-commande (add, view, remove)
-        const subCommandGroup = interaction.data.options[0];
-
-        if (subCommandGroup) {
-            const subCommandName = subCommandGroup.name; // 'add', 'view' ou 'remove'
-
-            // Créer la structure de base
-            options = {
-                [subCommandName]: {}
-            };
-
-            // Récupérer les sous-options (les paramètres de la commande)
-            if (subCommandGroup.options && Array.isArray(subCommandGroup.options)) {
-                // Pour chaque paramètre (target_id, recommended_id, etc.)
-                for (const param of subCommandGroup.options) {
-                    if (param.name && param.value !== undefined) {
-                        // Ajouter le paramètre à la sous-commande
-                        options[subCommandName][param.name] = param.value;
-                    }
-                }
-            }
-        }
-    }
-
-    console.log("Options extraites:", JSON.stringify(options));
+export const handleLinks: CommandHandler = async (options, interaction, env) => {
+    // Log pour déboguer les paramètres reçus
+    console.log("Options reçues:", JSON.stringify(options));
 
     // Vérifier que l'utilisateur a les droits d'administrateur pour add/remove
     const subCommand = options ? Object.keys(options)[0] : null;
-
     console.log("Sous-commande détectée:", subCommand);
 
     if ((subCommand === "add" || subCommand === "remove") && interaction) {
@@ -56,7 +26,6 @@ export const handleLinks: CommandHandler = async (originalOptions, interaction, 
             try {
                 const targetId = options.add?.target_id;
                 const recommendedId = options.add?.recommended_id;
-
                 console.log("Paramètres add:", { targetId, recommendedId });
 
                 if (!targetId || !recommendedId) {
@@ -92,6 +61,8 @@ export const handleLinks: CommandHandler = async (originalOptions, interaction, 
                 const targetId = options.remove?.target_id;
                 const recommendedId = options.remove?.recommended_id;
 
+                console.log("Paramètres remove:", { targetId, recommendedId });
+
                 if (!targetId) {
                     return "Vous devez fournir l'ID de l'article cible.";
                 }
@@ -118,6 +89,8 @@ export const handleLinks: CommandHandler = async (originalOptions, interaction, 
         case "view": {
             try {
                 const targetId = options.view?.target_id;
+
+                console.log("Paramètres view:", { targetId });
 
                 if (!targetId) {
                     return "Vous devez fournir l'ID de l'article cible.";
