@@ -1,7 +1,7 @@
 import { InteractionType, verifyKey } from "discord-interactions";
 import { findBestResponseWithEmbeddings, processQuestion } from "./ai-handler";
 import { InteractionResponseType, executeCommand } from "./commands";
-import { getMarkdownResponses } from "./markdown-loader";
+import { getMarkdownResponses, getResponseContent } from "./markdown-loader";
 
 export interface Env {
     DISCORD_PUBLIC_KEY: string;
@@ -190,10 +190,68 @@ export default {
 
                 // Traiter les composants de message (boutons, menus déroulants, etc.)
                 if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
+                    // Récupérer l'ID personnalisé du composant
+                    const customId = interaction.data.custom_id;
+
+                    // Traiter les boutons de visualisation du contenu
+                    if (customId.startsWith("view_")) {
+                        const contentId = customId.replace("view_", "");
+
+                        // Récupérer le contenu de l'article
+                        const content = await getResponseContent(contentId, env);
+
+                        // Récupérer les informations sur l'article
+                        const responses = await getMarkdownResponses(env);
+                        const response = responses[contentId];
+
+                        // Créer l'en-tête avec le nom et l'ID
+                        let messageContent = `# ${response?.name || "Contenu"} (ID: ${contentId})\n\n${content}`;
+
+                        // Limiter la longueur pour Discord (max 2000 caractères)
+                        if (messageContent.length > 1950) {
+                            messageContent = `${messageContent.substring(0, 1950)}...\n(Contenu tronqué)`;
+                        }
+
+                        // Structure de base de la réponse
+                        const responseData: any = {
+                            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                            data: { content: messageContent }
+                        };
+
+                        // Si l'article a des recommandations, ajouter des boutons
+                        if (response?.recommendedIds && response.recommendedIds.length > 0) {
+                            // Créer les boutons pour chaque recommandation (max 5 boutons par ligne)
+                            const buttons = response.recommendedIds
+                                .slice(0, 5) // Limiter à 5 recommandations max (limite Discord)
+                                .map((recId: string) => {
+                                    const recResponse = responses[recId];
+                                    return {
+                                        type: 2, // Button
+                                        style: 1, // Primary (bleu)
+                                        label: recResponse ? recResponse.name.slice(0, 80) : recId, // Limiter la longueur
+                                        custom_id: `view_${recId}` // ID utilisé pour l'interaction
+                                    };
+                                });
+
+                            // Ajouter les boutons à la réponse
+                            responseData.data.components = [
+                                {
+                                    type: 1, // Action Row
+                                    components: buttons
+                                }
+                            ];
+                        }
+
+                        return new Response(JSON.stringify(responseData), {
+                            headers: { "Content-Type": "application/json" }
+                        });
+                    }
+
+                    // Réponse par défaut pour les autres types de composants
                     return new Response(
                         JSON.stringify({
                             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                            data: { content: "Action reçue!" }
+                            data: { content: "Action non reconnue" }
                         }),
                         { headers: { "Content-Type": "application/json" } }
                     );
