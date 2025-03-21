@@ -1,190 +1,91 @@
-import { getMarkdownResponses, getResponseContent, responsesToEmbeddingData } from "./markdown-loader";
-import { findMostSimilarDocument } from "./util/embeddings";
-
-// Interface pour les résultats avec score
-interface SearchResult {
-    document: {
-        id?: string;
-        content: string;
-        name: string;
-        embedding: number[];
-    };
-    keywordScore: number;
-    embeddingScore: number;
-    aggregateScore: number;
-}
+import { getMarkdownResponses, getResponseContent } from "./markdown-loader";
 
 /**
- * Calcule un score de correspondance directe basé sur les mots-clés
- * @param query Requête de l'utilisateur
- * @param content Contenu à comparer
- * @param manualKeywords Mots-clés manuels qui ont plus de poids
+ * Fonction qui utilise l'IA de Cloudflare (Llama 3.3) avec KV existant
+ * pour sélectionner la réponse prédéfinie la plus pertinente
  */
-function calculateKeywordMatchScore(query: string, content: string, manualKeywords?: string[]): number {
-    // Normaliser textes
-    const normalizedQuery = query
-        .toLowerCase()
-        .replace(/[^\w\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-    const normalizedContent = content
-        .toLowerCase()
-        .replace(/[^\w\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    // Extraire les mots-clés (mots de 3+ caractères)
-    const queryWords = normalizedQuery.split(" ").filter((word) => word.length > 2);
-    const uniqueQueryWords = [...new Set(queryWords)];
-
-    if (uniqueQueryWords.length === 0) return 0;
-
-    // Compter les mots-clés trouvés dans le contenu
-    let matchCount = 0;
-    let manualMatchCount = 0;
-    let manualKeywordCount = 0;
-
-    // Vérifier les correspondances avec les mots-clés manuels (si présents)
-    if (manualKeywords && manualKeywords.length > 0) {
-        manualKeywordCount = manualKeywords.length;
-        for (const word of uniqueQueryWords) {
-            for (const keyword of manualKeywords) {
-                if (keyword.toLowerCase().includes(word) || word.includes(keyword.toLowerCase())) {
-                    manualMatchCount++;
-                    break;
-                }
-            }
-        }
-    }
-
-    // Vérifier les correspondances dans le contenu normal
-    for (const word of uniqueQueryWords) {
-        if (normalizedContent.includes(word)) {
-            matchCount++;
-        }
-    }
-
-    // Calculer le score: % de mots-clés trouvés (contenu) + bonus pour les mots-clés manuels
-    const contentScore = matchCount / uniqueQueryWords.length;
-
-    // Si aucun mot-clé manuel, retourner simplement le score de contenu
-    if (!manualKeywords || manualKeywordCount === 0) {
-        return contentScore;
-    }
-
-    // Sinon, calculer un score pondéré (les mots-clés manuels ont un poids plus important)
-    const manualScore = manualMatchCount / uniqueQueryWords.length;
-    return contentScore * 0.3 + manualScore * 0.7; // 70% pour les mots-clés manuels, 30% pour le contenu
-}
-
-/**
- * Fonction pour trouver la réponse la plus pertinente
- * Utilise une approche hybride combinant embeddings et mots-clés
- */
-export async function findBestResponseWithEmbeddings(query: string, env?: any): Promise<string | null> {
+export async function processQuestionWithAI(question: string, env?: any): Promise<string> {
     try {
-        // Récupérer toutes les réponses
+        // Étape 1: Normaliser la question
+        const normalizedQuestion = question.trim().replace(/\s+/g, " ");
+
+        if (normalizedQuestion.length < 5) {
+            return await getResponseContent("default", env);
+        }
+
+        // Étape 2: Récupérer toutes les réponses prédéfinies depuis KV
         const responses = await getMarkdownResponses(env);
 
-        // Ignorer les recherches très courtes
-        if (query.length < 5) {
-            return null;
+        if (!responses || Object.keys(responses).length === 0) {
+            console.log("Aucune réponse prédéfinie trouvée dans KV");
+            return await getResponseContent("default", env);
         }
 
-        // Convertir les réponses en format compatible
-        const documents = responsesToEmbeddingData(responses);
-
-        // Scoring hybride: combiner embeddings et mots-clés
-        const results: SearchResult[] = [];
-
-        for (const doc of documents) {
-            // Score par mots-clés (0-1), en utilisant les mots-clés manuels s'ils existent
-            const keywordScore = calculateKeywordMatchScore(query, doc.content, doc.keywords);
-
-            // On calcule le score embedding si on a un embedding
-            if (doc.embedding && doc.embedding.length > 0) {
-                // Ce score sera calculé plus tard avec findMostSimilarDocument
-                results.push({
-                    document: doc,
-                    keywordScore,
-                    embeddingScore: 0, // Sera mis à jour plus tard
-                    aggregateScore: 0 // Sera calculé après
-                });
-            } else if (keywordScore > 0.3) {
-                // Si pas d'embedding mais bon score par mots-clés, on considère quand même
-                results.push({
-                    document: doc,
-                    keywordScore,
-                    embeddingScore: 0,
-                    aggregateScore: 0
-                });
-            }
-        }
-
-        // Si aucun résultat, on abandonne
-        if (results.length === 0) {
-            console.log("Aucun document pertinent trouvé par mots-clés");
-            return null;
-        }
-
-        // Calculer les scores d'embedding pour les documents pré-filtrés
-        // (optimisation: on ne calcule pas pour tous les documents)
-        const validDocs = results.map((r) => r.document);
-        const embeddingResult = await findMostSimilarDocument(query, validDocs, 0.2); // Seuil très bas
-
-        // Mettre à jour les scores d'embedding
-        for (const result of results) {
-            if (result.document.id === embeddingResult.document?.id) {
-                result.embeddingScore = embeddingResult.similarity;
-            }
-        }
-
-        // Score agrégé: 70% embeddings + 30% mots-clés
-        for (const result of results) {
-            result.aggregateScore = result.embeddingScore * 0.7 + result.keywordScore * 0.3;
-        }
-
-        // Trier par score agrégé
-        results.sort((a, b) => b.aggregateScore - a.aggregateScore);
-
-        // Log pour débogage
-        console.log(`Requête: "${query}"`);
-        console.log("Top 3 résultats:");
-        for (let i = 0; i < Math.min(3, results.length); i++) {
-            const r = results[i];
-            console.log(
-                `${i + 1}. ${r.document.id} (${r.document.name}): Score=${r.aggregateScore.toFixed(2)} [E=${r.embeddingScore.toFixed(2)}, K=${r.keywordScore.toFixed(2)}]`
-            );
-        }
-
-        // Sélectionner le meilleur résultat si score suffisant
-        if (results.length > 0 && results[0].aggregateScore > 0.25) {
-            return results[0].document.id || null;
-        }
-
-        return null;
-    } catch (error) {
-        console.error("Erreur lors de la recherche:", error);
-        return null;
-    }
+        // Étape 3: Créer un message système pour l'IA
+        const systemMessage = `
+Tu es un assistant Discord qui doit sélectionner la réponse prédéfinie la plus appropriée.
+Tu dois analyser la question de l'utilisateur et choisir la réponse prédéfinie qui correspond le mieux.
+Tu répondras UNIQUEMENT au format JSON avec la structure suivante:
+{
+  "selectedResponseId": "id-de-la-réponse-choisie",
+  "confidence": 0.85, // entre 0 et 1
+  "reasoning": "Brève explication de ton choix (max 50 mots)"
 }
+Si aucune réponse ne correspond bien (confidence < 0.6), retourne "default" comme selectedResponseId.`;
 
-/**
- * Fonction principale pour traiter une question et obtenir une réponse
- */
-export async function processQuestion(question: string, env?: any): Promise<string> {
-    try {
-        // Chercher la meilleure réponse avec notre approche hybride
-        const bestMatch = await findBestResponseWithEmbeddings(question, env);
+        // Étape 4: Construire le message utilisateur avec les réponses disponibles
+        const contextResponses = Object.entries(responses).map(([id, response]) => ({
+            id,
+            name: response.name || id,
+            keywords: response.keywords || [],
+            content: response.content
+        }));
 
-        if (bestMatch) {
-            return await getResponseContent(bestMatch, env);
+        const userMessage = `Question: "${normalizedQuestion}"
+
+Voici les réponses prédéfinies disponibles:
+${contextResponses
+    .map(
+        (r) => `ID: ${r.id}
+${r.keywords?.length ? `Mots-clés: ${r.keywords.join(", ")}` : ""}
+Nom: ${r.name}
+Contenu: ${r.content.substring(0, 150)}...
+---`
+    )
+    .join("\n")}
+
+Choisis la réponse la plus appropriée pour la question.`;
+
+        // Étape 5: Appeler l'IA de Cloudflare
+        const stream = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+            messages: [
+                { role: "system", content: systemMessage },
+                { role: "user", content: userMessage }
+            ],
+            stream: false,
+            temperature: 0.2,
+            response_format: { type: "json" }
+        });
+
+        // Étape 6: Traiter la réponse de l'IA
+        const aiResponse = await stream.json();
+        console.log("Réponse IA:", aiResponse);
+
+        let selectedId = "default";
+        try {
+            if (aiResponse && typeof aiResponse === "object") {
+                selectedId = aiResponse.selectedResponseId || "default";
+                console.log(`IA a sélectionné: ${selectedId} avec confiance: ${aiResponse.confidence}`);
+            }
+        } catch (parseError) {
+            console.error("Erreur lors de l'analyse de la réponse de l'IA:", parseError);
+            throw new Error("Impossible d'analyser la réponse de l'IA");
         }
 
-        // Aucune correspondance trouvée, utiliser la réponse par défaut
-        return await getResponseContent("default", env);
+        // Étape 7: Récupérer le contenu de la réponse sélectionnée
+        return await getResponseContent(selectedId, env);
     } catch (error) {
-        console.error("Erreur lors du traitement de la question:", error);
-        return "Désolé, une erreur s'est produite lors du traitement de votre question.";
+        console.error("Erreur dans processQuestionWithAI:", error);
+        throw error; // Ne pas gérer l'erreur ici, la laisser remonter pour que le handler la gère
     }
 }

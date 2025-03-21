@@ -1,5 +1,5 @@
 import { InteractionType, verifyKey } from "discord-interactions";
-import { findBestResponseWithEmbeddings, processQuestion } from "./ai-handler";
+import { processQuestionWithAI } from "./ai-handler";
 import { InteractionResponseType, executeCommand } from "./commands";
 import { getMarkdownResponses, getResponseContent } from "./markdown-loader";
 
@@ -7,6 +7,7 @@ export interface Env {
     DISCORD_PUBLIC_KEY: string;
     DISCORD_APPLICATION_ID: string;
     DISCORD_BOT_TOKEN: string;
+    AI?: any;
 }
 
 // Type pour le contexte d'exécution
@@ -56,8 +57,13 @@ async function sendDiscordMessage(channelId: string, content: string, env: Env):
 // Fonction pour trouver une réponse avec l'IA
 async function findAIResponse(messageText: string, env?: any): Promise<string | null> {
     try {
-        // Utiliser directement processQuestion qui gère l'ensemble du processus
-        return await processQuestion(messageText, env);
+        // Utiliser la nouvelle fonction AI
+        if (env?.AI) {
+            return await processQuestionWithAI(messageText, env);
+        }
+
+        console.log("L'API AI n'est pas disponible");
+        return "Désolé, le système d'IA n'est pas disponible actuellement.";
     } catch (error) {
         console.error("Erreur lors de la recherche d'une réponse IA:", error);
         return null;
@@ -138,13 +144,8 @@ export default {
                         // Si c'est une commande de type content view ou ask, ajouter les boutons pour les recommandations
                         if ((commandName === "content" && options?.view) || commandName === "ask") {
                             // Pour content view, on connaît l'ID directement
-                            // Pour ask, on doit demander à l'IA quel ID a été trouvé
-                            const contentId =
-                                commandName === "content"
-                                    ? options?.view?.id
-                                    : options?.question
-                                      ? await findBestResponseWithEmbeddings(options.question, env)
-                                      : null;
+                            // Pour ask, on peut afficher les recommandations uniquement si on est dans content view
+                            const contentId = commandName === "content" ? options?.view?.id : null;
 
                             if (contentId) {
                                 const responses = await getMarkdownResponses(env);

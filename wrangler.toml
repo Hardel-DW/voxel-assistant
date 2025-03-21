@@ -13,6 +13,10 @@ command = "npm run build"
 binding = "MARKDOWN_KV"
 id = "66b8e8a93ca3416a96f1de229d0784e8"
 
+# Configuration AI pour Llama 3.3
+[ai]
+binding = "AI"
+
 # Secrets à configurer avec wrangler:
 # DISCORD_TOKEN
 # DISCORD_PUBLIC_KEY
