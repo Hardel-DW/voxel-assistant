@@ -15,7 +15,6 @@ export const handleAsk: CommandHandler = async (options, _, env) => {
     }
 
     try {
-        console.log("Utilisation du système d'IA de Cloudflare");
         // Utiliser uniquement le nouveau système d'IA avec Llama 3.3
         return await processQuestionWithAI(question, env);
     } catch (error) {

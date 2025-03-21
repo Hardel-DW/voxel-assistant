@@ -17,7 +17,7 @@ export async function processQuestionWithAI(question: string, env?: any): Promis
         const responses = await getMarkdownResponses(env);
 
         if (!responses || Object.keys(responses).length === 0) {
-            console.log("Aucune réponse prédéfinie trouvée dans KV");
+            console.error("Aucune réponse prédéfinie trouvée dans KV");
             return await getResponseContent("default", env);
         }
 
@@ -66,9 +66,6 @@ Choisis la réponse la plus appropriée pour la question.`;
             temperature: 0.2
         });
 
-        // Étape 6: Traiter la réponse de l'IA
-        console.log("Réponse IA brute:", stream);
-
         // La réponse pourrait être directement l'objet ou une propriété de l'objet retourné
         let aiResponseText = "";
 
@@ -90,8 +87,6 @@ Choisis la réponse la plus appropriée pour la question.`;
             }
         }
 
-        console.log("Texte extrait:", aiResponseText);
-
         // Essayer de parser le JSON à partir du texte de la réponse
         let aiResponse: { selectedResponseId?: string; confidence?: number; reasoning?: string } | undefined;
         let selectedId = "default";
@@ -101,21 +96,15 @@ Choisis la réponse la plus appropriée pour la question.`;
             const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const jsonStr = jsonMatch[0];
-                console.log("JSON détecté:", jsonStr);
                 aiResponse = JSON.parse(jsonStr);
-            } else {
-                console.log("Aucun JSON détecté dans la réponse, utilisant la réponse par défaut");
             }
 
             if (aiResponse && typeof aiResponse === "object") {
                 selectedId = aiResponse.selectedResponseId || "default";
-                console.log(`IA a sélectionné: ${selectedId} avec confiance: ${aiResponse.confidence || "non spécifiée"}`);
             }
         } catch (parseError) {
             console.error("Erreur lors de l'analyse de la réponse de l'IA:", parseError);
-            console.log("Texte qui a causé l'erreur:", aiResponseText);
-            // Utiliser la réponse par défaut plutôt que de lancer une erreur
-            console.log("Utilisation de la réponse par défaut en raison de l'erreur de parsing");
+            // Utiliser la réponse par défaut en cas d'erreur
         }
 
         // Étape 7: Récupérer le contenu de la réponse sélectionnée

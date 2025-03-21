@@ -62,7 +62,7 @@ async function findAIResponse(messageText: string, env?: any): Promise<string | 
             return await processQuestionWithAI(messageText, env);
         }
 
-        console.log("L'API AI n'est pas disponible");
+        console.error("L'API AI n'est pas disponible");
         return "Désolé, le système d'IA n'est pas disponible actuellement.";
     } catch (error) {
         console.error("Erreur lors de la recherche d'une réponse IA:", error);
@@ -73,8 +73,6 @@ async function findAIResponse(messageText: string, env?: any): Promise<string | 
 // Gestionnaire principal des requêtes Discord
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        console.log(`Requête reçue: ${request.method} ${request.url}`);
-
         // Répondre à une requête GET simple pour vérifier que le service fonctionne
         if (request.method === "GET") {
             return new Response("Bot Discord en ligne!", {
@@ -92,7 +90,6 @@ export default {
                 }
 
                 const interaction = await request.json();
-                console.log("Interaction reçue:", JSON.stringify(interaction));
 
                 // Répondre au ping Discord (vérification du webhook)
                 if (interaction.type === InteractionType.PING) {
@@ -129,8 +126,6 @@ export default {
                         }
                     }
 
-                    console.log("Options construites:", JSON.stringify(options));
-
                     // Exécuter la commande de manière asynchrone en passant l'objet interaction et env
                     const commandResponse = await executeCommand(commandName, options, interaction, env);
 
@@ -144,7 +139,7 @@ export default {
                         // Si c'est une commande de type content view ou ask, ajouter les boutons pour les recommandations
                         if ((commandName === "content" && options?.view) || commandName === "ask") {
                             // Pour content view, on connaît l'ID directement
-                            // Pour ask, on peut afficher les recommandations uniquement si on est dans content view
+                            // Pour ask, on affiche uniquement les recommandations dans content view
                             const contentId = commandName === "content" ? options?.view?.id : null;
 
                             if (contentId) {
