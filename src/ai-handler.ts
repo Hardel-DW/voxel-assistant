@@ -63,8 +63,7 @@ Choisis la réponse la plus appropriée pour la question.`;
                 { role: "user", content: userMessage }
             ],
             stream: false,
-            temperature: 0.2,
-            response_format: { type: "json" }
+            temperature: 0.2
         });
 
         // Étape 6: Traiter la réponse de l'IA
