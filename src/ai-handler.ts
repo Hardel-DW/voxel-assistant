@@ -67,18 +67,55 @@ Choisis la réponse la plus appropriée pour la question.`;
         });
 
         // Étape 6: Traiter la réponse de l'IA
-        const aiResponse = await stream.json();
-        console.log("Réponse IA:", aiResponse);
+        console.log("Réponse IA brute:", stream);
 
+        // La réponse pourrait être directement l'objet ou une propriété de l'objet retourné
+        let aiResponseText = "";
+
+        if (typeof stream === "string") {
+            aiResponseText = stream;
+        } else if (stream && typeof stream === "object") {
+            // Vérifier les différentes propriétés possibles qui pourraient contenir la réponse
+            if (stream.response) {
+                aiResponseText = stream.response;
+            } else if (stream.text) {
+                aiResponseText = stream.text;
+            } else if (stream.content) {
+                aiResponseText = stream.content;
+            } else if (stream.result?.response) {
+                aiResponseText = stream.result.response;
+            } else {
+                // Tenter de convertir l'objet entier en JSON
+                aiResponseText = JSON.stringify(stream);
+            }
+        }
+
+        console.log("Texte extrait:", aiResponseText);
+
+        // Essayer de parser le JSON à partir du texte de la réponse
+        let aiResponse: { selectedResponseId?: string; confidence?: number; reasoning?: string } | undefined;
         let selectedId = "default";
+
         try {
+            // Trouver le JSON dans la réponse - rechercher un objet entre accolades
+            const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const jsonStr = jsonMatch[0];
+                console.log("JSON détecté:", jsonStr);
+                aiResponse = JSON.parse(jsonStr);
+            } else {
+                console.log("Aucun JSON détecté dans la réponse, utilisant la réponse par défaut");
+            }
+
             if (aiResponse && typeof aiResponse === "object") {
                 selectedId = aiResponse.selectedResponseId || "default";
-                console.log(`IA a sélectionné: ${selectedId} avec confiance: ${aiResponse.confidence}`);
+                console.log(`IA a sélectionné: ${selectedId} avec confiance: ${aiResponse.confidence || "non spécifiée"}`);
             }
         } catch (parseError) {
             console.error("Erreur lors de l'analyse de la réponse de l'IA:", parseError);
-            throw new Error("Impossible d'analyser la réponse de l'IA");
+            console.log("Texte qui a causé l'erreur:", aiResponseText);
+            // Utiliser la réponse par défaut plutôt que de lancer une erreur
+            console.log("Utilisation de la réponse par défaut en raison de l'erreur de parsing");
         }
 
         // Étape 7: Récupérer le contenu de la réponse sélectionnée
