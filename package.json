@@ -15,7 +15,7 @@
     "devDependencies": {
         "@biomejs/biome": "1.9.4",
         "@cloudflare/workers-types": "4.20250317.0",
-        "dotenv": "16.4.7",
+        "dotenv": "17.2.3",
         "ts-node": "10.9.2",
         "tsx": "4.19.3",
         "typescript": "~5.7.2",
